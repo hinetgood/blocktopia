@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Blocktopia</string>
+    <string name="title_activity_main">Blocktopia</string>
+    <string name="package_name">com.blocktopia.app</string>
+    <string name="custom_url_scheme">com.blocktopia.app</string>
+</resources>
