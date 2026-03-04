@@ -1765,6 +1765,28 @@ function renderMenu(now) {
   const mt = Math.min((now - menuAnim)/800, 1);
   const e = easeOut3(mt);
 
+  // Sparkle particles — floating stars
+  for (let i = 0; i < 15; i++) {
+    const st = (now * 0.00025 + i * 0.067) % 1;
+    const sx = (i * 43 + Math.sin(now*0.0008+i*2.1)*30) % L.w;
+    const sy = st * L.h;
+    const sa = (1 - st) * 0.3 * e;
+    const ss = 1.5 + Math.sin(now*0.004+i*1.3)*1;
+    ctx.globalAlpha = sa;
+    ctx.fillStyle = i%4===0?'#FFD700':i%4===1?'#87CEEB':i%4===2?'#FFB6C1':'#B0E0E6';
+    ctx.beginPath();
+    // 4-point star shape
+    const sn = now*0.003+i;
+    for (let p = 0; p < 8; p++) {
+      const a = p * Math.PI/4 + sn;
+      const rd = p%2===0 ? ss : ss*0.4;
+      const px = sx + Math.cos(a)*rd, py = sy + Math.sin(a)*rd;
+      p===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
   // Floating decorative blocks in background
   ctx.globalAlpha = e * 0.12;
   for (let i = 0; i < 8; i++) {
@@ -2497,6 +2519,14 @@ function renderPauseOverlay(now) {
   ctx.lineWidth = 1;
   roundRect(px,py,pw,ph,20); ctx.stroke();
 
+  // Mascot at top of pause panel
+  const pmi = _assetImages.mascot;
+  if (pmi && pmi.complete && pmi.naturalWidth > 0) {
+    const ms = 52;
+    const bobY = Math.sin(now*0.0025)*4;
+    ctx.drawImage(pmi, cx-ms/2, py-ms*0.35+bobY, ms, ms);
+  }
+
   // Title with glow
   const titleY = py+52;
   ctx.shadowColor = 'rgba(100,120,255,0.4)'; ctx.shadowBlur = 20;
@@ -2605,28 +2635,67 @@ function renderGameOverOverlay(now) {
 
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
-  // Mascot (sad/dizzy) + Cute title
+  // New record confetti particles
+  const isNewRecord = state.newRecordTriggered;
+  if (isNewRecord) {
+    ctx.save();
+    for (let i = 0; i < 20; i++) {
+      const ct = ((now * 0.0005 + i * 0.05) % 1);
+      const cx2 = px + (i * 17 + Math.sin(now*0.002+i)*30) % pw;
+      const cy2 = py + ct * ph;
+      const ca = (1 - ct) * 0.6;
+      const cw2 = 4 + Math.sin(i*2.1)*2, ch2 = 6 + Math.cos(i*1.7)*3;
+      ctx.globalAlpha = ca;
+      ctx.fillStyle = ['#FFD700','#FF6B6B','#4FC3F7','#81C784','#FFB74D','#CE93D8'][i%6];
+      ctx.save();
+      ctx.translate(cx2, cy2);
+      ctx.rotate(now*0.003+i);
+      ctx.fillRect(-cw2/2, -ch2/2, cw2, ch2);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Mascot + Cute title
   const goMi = _assetImages.mascot;
   let cy = py+45;
   if (goMi && goMi.complete && goMi.naturalWidth > 0) {
     const ms = 56;
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = isNewRecord ? 1 : 0.7;
     ctx.save();
     ctx.translate(cx, cy-8);
-    ctx.rotate(Math.sin(now*0.004)*0.08);  // Gentle wobble
+    if (isNewRecord) {
+      // Happy bounce for new record
+      ctx.translate(0, Math.sin(now*0.006)*4);
+      ctx.scale(1+Math.sin(now*0.008)*0.03, 1+Math.sin(now*0.008)*0.03);
+    } else {
+      ctx.rotate(Math.sin(now*0.004)*0.08);  // Gentle wobble
+    }
     ctx.drawImage(goMi, -ms/2, -ms/2, ms, ms);
     ctx.restore();
     ctx.globalAlpha = 1;
     cy += 36;
   }
-  ctx.shadowColor = 'rgba(255,100,100,0.3)'; ctx.shadowBlur = 15;
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 26px '+CUTE;
-  ctx.fillText('\u904A\u6232\u7D50\u675F!', cx, cy);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#8899AA';
-  ctx.font = '600 13px '+CUTE;
-  ctx.fillText('Game Over', cx, cy+22);
+  if (isNewRecord) {
+    ctx.shadowColor = 'rgba(255,200,60,0.5)'; ctx.shadowBlur = 20;
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 26px '+CUTE;
+    ctx.fillText('\u2728 \u65B0\u7D00\u9304! \u2728', cx, cy);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#FFE082';
+    ctx.font = '600 13px '+CUTE;
+    ctx.fillText('NEW RECORD!', cx, cy+22);
+  } else {
+    ctx.shadowColor = 'rgba(255,100,100,0.3)'; ctx.shadowBlur = 15;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 26px '+CUTE;
+    ctx.fillText('\u904A\u6232\u7D50\u675F!', cx, cy);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#8899AA';
+    ctx.font = '600 13px '+CUTE;
+    ctx.fillText('Game Over', cx, cy+22);
+  }
 
   // Big score with sparkles
   cy += 66;
@@ -3420,10 +3489,8 @@ function renderLeaderboard(now) {
       // Bar top highlight
       ctx.fillStyle = s.col+'40';
       ctx.fillRect(s.x-barW/2+4, barTop+1, barW-8, 2);
-      // Rank number on bar
-      ctx.fillStyle = s.col;
-      ctx.font = 'bold 18px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(s.idx+1), s.x, barTop + s.barH/2);
+      // Medal on podium bar
+      _drawMedalBadge(s.x, barTop + s.barH/2, Math.min(s.barH*0.32, 16), s.idx, s.col, s.dk);
 
       // Avatar ring (animated)
       _drawAvatarRing(s.x, avY, s.avR, s.col, now + s.idx*1000);
@@ -3470,13 +3537,21 @@ function renderLeaderboard(now) {
       ctx.fillText('\uD83C\uDFC6', cx, emCy);
       ctx.shadowBlur = 0;
     }
+    // Mascot waving below trophy
+    const emi = _assetImages.mascot;
+    if (emi && emi.complete && emi.naturalWidth > 0) {
+      const ems = 64;
+      const emBob = Math.sin(now*0.002)*5;
+      ctx.drawImage(emi, cx-ems/2, emCy+40+emBob, ems, ems);
+    }
     ctx.fillStyle = '#8899BB';
     ctx.font = 'bold 17px '+F;
-    ctx.fillText('\u7B49\u4F60\u4F86\u6311\u6230\uFF01', cx, emCy+50);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('\u7B49\u4F60\u4F86\u6311\u6230\uFF01', cx, emCy+120);
     ctx.fillStyle = '#556677';
     ctx.font = '13px '+F;
-    ctx.fillText('\u73A9\u904E\u904A\u6232\u5F8C\u5206\u6578\u81EA\u52D5\u4E0A\u699C', cx, emCy+74);
-    curY = emCy + 110;
+    ctx.fillText('\u73A9\u904E\u904A\u6232\u5F8C\u5206\u6578\u81EA\u52D5\u4E0A\u699C', cx, emCy+142);
+    curY = emCy + 170;
   }
 
   // ── Divider: Global Ranking ──
