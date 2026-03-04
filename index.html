@@ -2038,42 +2038,94 @@ function renderMenu(now) {
   ctx.fillText('\u25B6 \u958B\u59CB Play', cx, btn1Y + btnH/2);
   hitAreas.play = {x:btnX, y:btn1Y, w:btnW, h:btnH};
 
-  // Hearts display
+  // Hearts display — TOP CENTER, prominent
   recoverHearts();
-  const heartsY = btn1Y + btnH + 12;
+  const heartsTopY = 28;
   ctx.globalAlpha = e;
-  ctx.font = '18px '+CUTE;
-  ctx.textAlign = 'center';
-  let heartsStr = '';
-  for (let i = 0; i < HEARTS_MAX; i++) {
-    heartsStr += i < hearts.current ? '\u2764\uFE0F' : '\uD83E\uDE76';
-  }
-  ctx.fillStyle = hearts.current > 0 ? '#FF6B6B' : '#666';
-  ctx.fillText(heartsStr, cx, heartsY + 10);
 
-  // Timer or watch-ad button when low hearts
-  let heartsExtraH = 24;
+  // Background pill for hearts
+  const hPillW = 200, hPillH = 50;
+  const hPillX = cx - hPillW/2, hPillY = heartsTopY - 8;
+  ctx.fillStyle = 'rgba(20,15,40,0.7)';
+  roundRect(hPillX, hPillY, hPillW, hPillH, hPillH/2); ctx.fill();
+  ctx.strokeStyle = hearts.current > 0 ? 'rgba(255,100,100,0.5)' : 'rgba(100,100,100,0.4)';
+  ctx.lineWidth = 1.5;
+  roundRect(hPillX, hPillY, hPillW, hPillH, hPillH/2); ctx.stroke();
+
+  // Draw individual hearts with spacing
+  const heartSize = 24;
+  const heartGap = 6;
+  const totalHW = HEARTS_MAX * heartSize + (HEARTS_MAX-1) * heartGap;
+  const heartStartX = cx - totalHW/2;
+  for (let i = 0; i < HEARTS_MAX; i++) {
+    const hx = heartStartX + i * (heartSize + heartGap) + heartSize/2;
+    const hy = heartsTopY + 8;
+    if (i < hearts.current) {
+      // Filled heart — draw with canvas path
+      const pulse = 1 + Math.sin(now*0.004 + i*0.5)*0.06;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.scale(pulse, pulse);
+      ctx.fillStyle = '#FF4466';
+      ctx.shadowColor = 'rgba(255,68,102,0.6)';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      const hs = heartSize * 0.42;
+      ctx.moveTo(0, hs*0.35);
+      ctx.bezierCurveTo(-hs, -hs*0.3, -hs*0.5, -hs, 0, -hs*0.4);
+      ctx.bezierCurveTo(hs*0.5, -hs, hs, -hs*0.3, 0, hs*0.35);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Shine dot
+      ctx.globalAlpha = e * 0.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(-hs*0.25, -hs*0.35, hs*0.15, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = e;
+      ctx.restore();
+    } else {
+      // Empty heart — outline only
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.strokeStyle = 'rgba(255,100,100,0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const hs = heartSize * 0.42;
+      ctx.moveTo(0, hs*0.35);
+      ctx.bezierCurveTo(-hs, -hs*0.3, -hs*0.5, -hs, 0, -hs*0.4);
+      ctx.bezierCurveTo(hs*0.5, -hs, hs, -hs*0.3, 0, hs*0.35);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Timer countdown below hearts
+  let heartsExtraH = 0;
   if (hearts.current < HEARTS_MAX) {
     const nextMs = getNextHeartTime();
-    ctx.font = '12px '+CUTE;
-    ctx.fillStyle = '#778899';
-    ctx.fillText('\u2764\uFE0F +1 in ' + formatTime(nextMs), cx, heartsY + 26);
-    heartsExtraH = 40;
+    ctx.font = 'bold 13px '+CUTE;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FF8899';
+    ctx.fillText('\u2764 +1  ' + formatTime(nextMs), cx, hPillY + hPillH + 16);
+    heartsExtraH = 8;
   }
+
+  // Watch Ad button when no hearts
   if (hearts.current <= 0) {
-    // Watch Ad button
-    const adBW = 180, adBH = 36;
-    const adBX = cx-adBW/2, adBY = heartsY + 30;
-    ctx.fillStyle = 'rgba(255,100,100,0.15)';
+    const adBW = 200, adBH = 40;
+    const adBX = cx-adBW/2, adBY = hPillY + hPillH + 24;
+    const adGrad = ctx.createLinearGradient(adBX, adBY, adBX+adBW, adBY+adBH);
+    adGrad.addColorStop(0, '#FF5577'); adGrad.addColorStop(1, '#FF3355');
+    ctx.fillStyle = adGrad;
     roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,100,100,0.4)';
-    ctx.lineWidth = 1;
-    roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.stroke();
-    ctx.fillStyle = '#FF6B6B';
-    ctx.font = 'bold 14px '+CUTE;
-    ctx.fillText('\uD83C\uDFAC \u770B\u5EE3\u544A +\u2764\uFE0F', cx, adBY + adBH/2);
+    ctx.shadowColor = 'rgba(255,50,80,0.4)'; ctx.shadowBlur = 12;
+    roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px '+CUTE;
+    ctx.fillText('\uD83C\uDFAC \u770B\u5EE3\u544A\u7372\u5F97 \u2764\uFE0F', cx, adBY + adBH/2);
     hitAreas.watchAdHeart = {x:adBX, y:adBY, w:adBW, h:adBH};
-    heartsExtraH = 72;
   } else {
     hitAreas.watchAdHeart = null;
   }
