@@ -3197,7 +3197,7 @@ function getLevelProgressText() {
 }
 
 // ============================================================
-//  RENDERING — LEADERBOARD (LINE Game Style)
+//  RENDERING — LEADERBOARD (Premium LINE Game Style)
 // ============================================================
 function _drawAvatar(img, x, y, r, fallbackColor, fallbackChar) {
   if (img && img.complete && img.naturalWidth > 0) {
@@ -3205,21 +3205,86 @@ function _drawAvatar(img, x, y, r, fallbackColor, fallbackChar) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.clip();
     ctx.drawImage(img, x-r, y-r, r*2, r*2);
     ctx.restore();
-    // Thin ring
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.stroke();
   } else {
-    const g = ctx.createRadialGradient(x-r*0.3, y-r*0.3, 0, x, y, r);
-    g.addColorStop(0, fallbackColor);
-    g.addColorStop(1, fallbackColor.replace(')', ',0.7)').replace('rgb','rgba'));
-    ctx.fillStyle = g;
+    ctx.fillStyle = fallbackColor;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    // Inner highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.arc(x, y-r*0.2, r*0.7, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold '+Math.round(r)+'px "Nunito",sans-serif';
+    ctx.font = 'bold '+Math.round(r*0.9)+'px "Nunito",sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(fallbackChar || '?', x, y+1);
   }
+}
+
+function _drawAvatarRing(x, y, r, color, now) {
+  // Animated glowing ring around avatar
+  const pulse = 0.6 + Math.sin(now * 0.003) * 0.4;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8 * pulse;
+  ctx.beginPath(); ctx.arc(x, y, r+3, 0, Math.PI*2); ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function _drawCrown(x, y, s) {
+  // Simple canvas crown
+  ctx.fillStyle = '#FFD700';
+  ctx.shadowColor = 'rgba(255,215,0,0.5)'; ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(x-s, y+s*0.4);
+  ctx.lineTo(x-s, y-s*0.3);
+  ctx.lineTo(x-s*0.5, y+s*0.1);
+  ctx.lineTo(x, y-s*0.6);
+  ctx.lineTo(x+s*0.5, y+s*0.1);
+  ctx.lineTo(x+s, y-s*0.3);
+  ctx.lineTo(x+s, y+s*0.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  // Gems
+  ctx.fillStyle = '#FF4444';
+  ctx.beginPath(); ctx.arc(x, y-s*0.15, s*0.12, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#44AAFF';
+  ctx.beginPath(); ctx.arc(x-s*0.5, y+s*0.05, s*0.08, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+s*0.5, y+s*0.05, s*0.08, 0, Math.PI*2); ctx.fill();
+}
+
+function _drawMedalBadge(x, y, r, rank, color, darkColor) {
+  // 3D medal with ribbon
+  // Ribbon
+  ctx.fillStyle = rank===0?'#CC0000':rank===1?'#3355AA':'#884422';
+  ctx.beginPath();
+  ctx.moveTo(x-r*0.4, y-r*0.2);
+  ctx.lineTo(x-r*0.7, y-r*1.2);
+  ctx.lineTo(x-r*0.1, y-r*0.6);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+r*0.4, y-r*0.2);
+  ctx.lineTo(x+r*0.7, y-r*1.2);
+  ctx.lineTo(x+r*0.1, y-r*0.6);
+  ctx.closePath(); ctx.fill();
+  // Medal circle
+  const mg = ctx.createRadialGradient(x-r*0.25, y-r*0.25, 0, x, y, r);
+  mg.addColorStop(0, '#fff');
+  mg.addColorStop(0.3, color);
+  mg.addColorStop(1, darkColor);
+  ctx.fillStyle = mg;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  // Inner ring
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, r*0.75, 0, Math.PI*2); ctx.stroke();
+  // Number
+  ctx.fillStyle = darkColor;
+  ctx.font = 'bold '+Math.round(r*0.9)+'px "Nunito",sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(rank+1), x, y+1);
 }
 
 function renderLeaderboard(now) {
@@ -3227,194 +3292,281 @@ function renderLeaderboard(now) {
   const F = '"Nunito","Comic Neue","Segoe UI",sans-serif';
   const cx = L.w/2;
   const pad = 16;
-  const cardW = Math.min(L.w - pad*2, 400);
-  const cardX = cx - cardW/2;
-
-  drawBackground();
-  fetchLeaderboard();
-
-  // ── Header Bar (frosted glass) ──
-  const hdrH = 56;
-  ctx.fillStyle = 'rgba(18,24,42,0.85)';
-  ctx.fillRect(0, 0, L.w, hdrH);
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
-  ctx.fillRect(0, hdrH-1, L.w, 1);
-
-  // Back button
-  const bbS = 36;
-  const bbX = pad, bbY = (hdrH-bbS)/2;
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  roundRect(bbX, bbY, bbS, bbS, 12); ctx.fill();
-  ctx.fillStyle = '#AAB8CC';
-  ctx.font = '18px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('\u276E', bbX+bbS/2, hdrH/2);
-  hitAreas.lbBack = {x:bbX, y:bbY, w:bbS, h:bbS};
-
-  // Title
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 20px '+F;
-  ctx.textAlign = 'center';
-  ctx.fillText('\u6392\u884C\u699C', cx, hdrH/2);
-
-  // Right: avatar or login
-  if (lineUser) {
-    _drawAvatar(lineUser.avatarImg, L.w-pad-16, hdrH/2, 16, '#06C755', lineUser.name?lineUser.name[0]:'');
-  } else {
-    const lbW=80, lbH=30, lbX=L.w-pad-lbW, lbY=(hdrH-lbH)/2;
-    ctx.fillStyle = '#06C755';
-    roundRect(lbX, lbY, lbW, lbH, lbH/2); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px '+F; ctx.textAlign = 'center';
-    ctx.fillText('LINE \u767B\u5165', lbX+lbW/2, lbY+lbH/2);
-    hitAreas.lineLogin = {x:lbX, y:lbY, w:lbW, h:lbH};
-  }
-
-  let curY = hdrH + 16;
-
-  // ── My Score Card ──
-  const myCardH = 80;
-  // Card background gradient
-  const mcg = ctx.createLinearGradient(cardX, curY, cardX+cardW, curY+myCardH);
-  mcg.addColorStop(0, 'rgba(55,80,170,0.25)');
-  mcg.addColorStop(1, 'rgba(100,60,200,0.15)');
-  ctx.fillStyle = mcg;
-  roundRect(cardX, curY, cardW, myCardH, 16); ctx.fill();
-  ctx.strokeStyle = 'rgba(120,140,255,0.2)';
-  ctx.lineWidth = 1;
-  roundRect(cardX, curY, cardW, myCardH, 16); ctx.stroke();
-
+  const cW = Math.min(L.w - pad*2, 400);
+  const cX = cx - cW/2;
   const entries = leaderboardData.length > 0 ? leaderboardData : [];
   let myRank = -1;
   if (lineUser) myRank = entries.findIndex(e => e.uid === lineUser.uid);
 
+  drawBackground();
+  fetchLeaderboard();
+
+  // ── Floating sparkle particles (background layer) ──
+  ctx.save();
+  for (let i = 0; i < 12; i++) {
+    const t = (now * 0.0004 + i * 0.52) % 1;
+    const sx = cX + (i * 37 + Math.sin(now*0.001+i)*20) % cW;
+    const sy = 60 + t * (L.h - 120);
+    const sa = (1 - t) * 0.25;
+    const ss = 2 + Math.sin(now*0.003+i*1.7)*1.5;
+    ctx.globalAlpha = sa;
+    ctx.fillStyle = i%3===0?'#FFD700':i%3===1?'#87CEEB':'#FFB6C1';
+    ctx.beginPath(); ctx.arc(sx, sy, ss, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // ── Header Bar ──
+  const hdrH = 52;
+  const hg = ctx.createLinearGradient(0, 0, 0, hdrH);
+  hg.addColorStop(0, 'rgba(15,20,40,0.95)');
+  hg.addColorStop(1, 'rgba(15,20,40,0.8)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(0, 0, L.w, hdrH);
+  // Gold accent line
+  const ag = ctx.createLinearGradient(cX, hdrH-1, cX+cW, hdrH-1);
+  ag.addColorStop(0, 'rgba(255,215,0,0)');
+  ag.addColorStop(0.5, 'rgba(255,215,0,0.3)');
+  ag.addColorStop(1, 'rgba(255,215,0,0)');
+  ctx.fillStyle = ag;
+  ctx.fillRect(0, hdrH-1, L.w, 1);
+
+  // Back button
+  const bbS = 34, bbX = pad, bbY = (hdrH-bbS)/2;
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  roundRect(bbX, bbY, bbS, bbS, bbS/2); ctx.fill();
+  ctx.fillStyle = '#99AABB';
+  ctx.font = '16px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('\u276E', bbX+bbS/2, hdrH/2);
+  hitAreas.lbBack = {x:bbX, y:bbY, w:bbS, h:bbS};
+
+  // Title with gold shimmer
+  const shimmer = 0.85 + Math.sin(now*0.002)*0.15;
+  ctx.fillStyle = 'rgba(255,215,0,'+shimmer+')';
+  ctx.font = 'bold 20px '+F; ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(255,200,60,0.4)'; ctx.shadowBlur = 12;
+  ctx.fillText('\uD83C\uDFC6 \u6392\u884C\u699C', cx, hdrH/2);
+  ctx.shadowBlur = 0;
+
+  // Right: avatar or login
   if (lineUser) {
+    _drawAvatar(lineUser.avatarImg, L.w-pad-16, hdrH/2, 15, '#06C755', lineUser.name?lineUser.name[0]:'');
+  } else {
+    const lbW=76, lbH=28, lbX=L.w-pad-lbW, lbY=(hdrH-lbH)/2;
+    ctx.fillStyle = '#06C755';
+    roundRect(lbX, lbY, lbW, lbH, lbH/2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px '+F; ctx.textAlign = 'center';
+    ctx.fillText('LINE \u767B\u5165', lbX+lbW/2, lbY+lbH/2);
+    hitAreas.lineLogin = {x:lbX, y:lbY, w:lbW, h:lbH};
+  }
+
+  let curY = hdrH + 8;
+
+  // ══════════════════════════════════════════
+  //  PODIUM — Top 3 Special Display
+  // ══════════════════════════════════════════
+  if (entries.length >= 1) {
+    const podH = Math.min(220, L.h * 0.3);
+    const podBot = curY + podH;
+    // Podium background glow
+    const pbg = ctx.createRadialGradient(cx, curY+podH*0.4, 0, cx, curY+podH*0.4, cW*0.6);
+    pbg.addColorStop(0, 'rgba(255,200,60,0.06)');
+    pbg.addColorStop(1, 'rgba(255,200,60,0)');
+    ctx.fillStyle = pbg;
+    ctx.fillRect(0, curY, L.w, podH);
+
+    // Podium slots: [#2 left, #1 center, #3 right]
+    const slots = [
+      {idx:1, x:cx-cW*0.3, barH:podH*0.24, avR:22, col:'#C0C0C0', dk:'#707070'},
+      {idx:0, x:cx,         barH:podH*0.34, avR:28, col:'#FFD700', dk:'#B8860B'},
+      {idx:2, x:cx+cW*0.3, barH:podH*0.18, avR:20, col:'#CD7F32', dk:'#8B4513'},
+    ];
+    const barW = 62;
+
+    for (const s of slots) {
+      const e = entries[s.idx];
+      if (!e) continue;
+      const barTop = podBot - s.barH;
+      const avY = barTop - s.avR - 14;
+
+      // Podium bar
+      const bg = ctx.createLinearGradient(s.x-barW/2, barTop, s.x+barW/2, podBot);
+      bg.addColorStop(0, s.col+'55');
+      bg.addColorStop(0.5, s.col+'30');
+      bg.addColorStop(1, s.col+'10');
+      ctx.fillStyle = bg;
+      roundRect(s.x-barW/2, barTop, barW, s.barH, 6); ctx.fill();
+      // Bar top highlight
+      ctx.fillStyle = s.col+'40';
+      ctx.fillRect(s.x-barW/2+4, barTop+1, barW-8, 2);
+      // Rank number on bar
+      ctx.fillStyle = s.col;
+      ctx.font = 'bold 18px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(s.idx+1), s.x, barTop + s.barH/2);
+
+      // Avatar ring (animated)
+      _drawAvatarRing(s.x, avY, s.avR, s.col, now + s.idx*1000);
+      // Avatar
+      _drawAvatar(e.avatarImg, s.x, avY, s.avR, COLORS[s.idx%COLORS.length].base, e.name?e.name[0]:'?');
+
+      // Crown for #1
+      if (s.idx === 0) {
+        _drawCrown(s.x, avY - s.avR - 14, 12);
+      }
+
+      // Name below podium
+      ctx.fillStyle = '#DDEEFF';
+      ctx.font = (s.idx===0?'bold ':'600 ')+'12px '+F;
+      ctx.textAlign = 'center';
+      const dn = e.name || 'Player';
+      ctx.fillText(dn.length>6?dn.slice(0,6)+'..':dn, s.x, podBot+14);
+      // Score
+      ctx.fillStyle = s.col;
+      ctx.font = 'bold 13px '+F;
+      ctx.fillText(e.score.toLocaleString(), s.x, podBot+30);
+    }
+    curY = podBot + 46;
+  } else if (lbLoading) {
+    // Loading state
+    ctx.fillStyle = '#8899AA';
+    ctx.font = '14px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const dots = '.'.repeat(1 + Math.floor(now/400)%3);
+    ctx.fillText('\u8F09\u5165\u4E2D'+dots, cx, curY+80);
+    curY += 160;
+  } else {
+    // Empty state
+    const emCy = curY + 80;
+    // Big trophy with glow
+    const gp = 0.4 + Math.sin(now*0.002)*0.3;
+    ctx.shadowColor = 'rgba(255,200,60,'+gp+')'; ctx.shadowBlur = 30;
+    ctx.font = '60px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('\uD83C\uDFC6', cx, emCy);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#8899BB';
+    ctx.font = 'bold 17px '+F;
+    ctx.fillText('\u7B49\u4F60\u4F86\u6311\u6230\uFF01', cx, emCy+50);
+    ctx.fillStyle = '#556677';
+    ctx.font = '13px '+F;
+    ctx.fillText('\u73A9\u904E\u904A\u6232\u5F8C\u5206\u6578\u81EA\u52D5\u4E0A\u699C', cx, emCy+74);
+    curY = emCy + 110;
+  }
+
+  // ── Divider: Global Ranking ──
+  const divG = ctx.createLinearGradient(cX, curY, cX+cW, curY);
+  divG.addColorStop(0, 'rgba(255,255,255,0)');
+  divG.addColorStop(0.2, 'rgba(255,255,255,0.08)');
+  divG.addColorStop(0.8, 'rgba(255,255,255,0.08)');
+  divG.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = divG;
+  ctx.fillRect(cX, curY, cW, 1);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#667788';
+  ctx.font = '600 11px '+F;
+  ctx.fillText('\uD83C\uDF0F  \u5168\u7403\u6392\u884C  GLOBAL RANKING', cx, curY+14);
+  curY += 30;
+
+  // ══════════════════════════════════════════
+  //  LIST ROWS (#4+)
+  // ══════════════════════════════════════════
+  const rowH = 52;
+  const listStart = entries.length >= 3 ? 3 : 0;
+  const maxRow = Math.min(entries.length, Math.floor((L.h - curY - 68) / rowH) + listStart);
+
+  for (let i = listStart; i < maxRow; i++) {
+    const e = entries[i];
+    const ey = curY + (i - listStart) * rowH;
+    const isMe = lineUser && e.uid === lineUser.uid;
+    const ry = ey + rowH/2;
+
+    // Row card
+    if (isMe) {
+      const mg = ctx.createLinearGradient(cX, ey, cX+cW, ey);
+      mg.addColorStop(0, 'rgba(80,120,255,0.15)');
+      mg.addColorStop(1, 'rgba(120,80,255,0.08)');
+      ctx.fillStyle = mg;
+      roundRect(cX, ey, cW, rowH-4, 12); ctx.fill();
+      ctx.strokeStyle = 'rgba(100,140,255,0.3)';
+      ctx.lineWidth = 1;
+      roundRect(cX, ey, cW, rowH-4, 12); ctx.stroke();
+    } else if (i % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.02)';
+      roundRect(cX, ey, cW, rowH-4, 12); ctx.fill();
+    }
+
+    // Rank number
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = isMe ? '#88BBFF' : '#556677';
+    ctx.font = 'bold 15px '+F;
+    ctx.fillText(String(i+1), cX+22, ry-2);
+
     // Avatar
-    _drawAvatar(lineUser.avatarImg, cardX+44, curY+myCardH/2, 24, '#06C755', lineUser.name[0]);
+    _drawAvatar(e.avatarImg, cX+54, ry-2, 17, COLORS[i%COLORS.length].base, e.name?e.name[0]:'?');
+
+    // Name
+    ctx.textAlign = 'left';
+    ctx.fillStyle = isMe ? '#BBDDFF' : '#CCDDE8';
+    ctx.font = (isMe?'bold ':'600 ')+'14px '+F;
+    const dn = e.name || 'Player';
+    ctx.fillText(dn.length>8?dn.slice(0,8)+'..':dn, cX+80, ry-2);
+
+    // Score
+    ctx.textAlign = 'right';
+    ctx.fillStyle = isMe ? '#FFD34E' : '#99AABB';
+    ctx.font = 'bold 15px '+F;
+    ctx.fillText(e.score.toLocaleString(), cX+cW-14, ry-2);
+  }
+
+  // ══════════════════════════════════════════
+  //  BOTTOM BAR — My Score (fixed)
+  // ══════════════════════════════════════════
+  const btmH = 58;
+  const btmY = L.h - btmH;
+  // Frosted glass bottom
+  const btmG = ctx.createLinearGradient(0, btmY-8, 0, btmY);
+  btmG.addColorStop(0, 'rgba(15,20,35,0)');
+  btmG.addColorStop(1, 'rgba(15,20,35,0.95)');
+  ctx.fillStyle = btmG;
+  ctx.fillRect(0, btmY-8, L.w, 8);
+  ctx.fillStyle = 'rgba(15,20,35,0.95)';
+  ctx.fillRect(0, btmY, L.w, btmH);
+  // Top accent
+  const btmAcc = ctx.createLinearGradient(cX, btmY, cX+cW, btmY);
+  btmAcc.addColorStop(0, 'rgba(100,140,255,0)');
+  btmAcc.addColorStop(0.5, 'rgba(100,140,255,0.2)');
+  btmAcc.addColorStop(1, 'rgba(100,140,255,0)');
+  ctx.fillStyle = btmAcc;
+  ctx.fillRect(0, btmY, L.w, 1);
+
+  const btmCy = btmY + btmH/2;
+  if (lineUser) {
+    // My avatar
+    _drawAvatar(lineUser.avatarImg, cX+24, btmCy, 18, '#06C755', lineUser.name[0]);
     // Name + rank
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 16px '+F;
-    ctx.fillText(lineUser.name, cardX+78, curY+myCardH/2-12);
-    ctx.fillStyle = '#8899BB';
-    ctx.font = '12px '+F;
-    ctx.fillText(myRank >= 0 ? '\u6392\u540D #'+(myRank+1) : '\u5C1A\u672A\u4E0A\u699C', cardX+78, curY+myCardH/2+10);
-    // Score (right side, big)
+    ctx.font = 'bold 14px '+F;
+    ctx.fillText(lineUser.name, cX+50, btmCy-8);
+    ctx.fillStyle = myRank >= 0 ? '#88BBFF' : '#667788';
+    ctx.font = '11px '+F;
+    ctx.fillText(myRank >= 0 ? '\u6392\u540D #'+(myRank+1) : '\u5C1A\u672A\u4E0A\u699C', cX+50, btmCy+9);
+    // Score
     ctx.textAlign = 'right';
     ctx.fillStyle = '#FFD34E';
-    ctx.font = 'bold 26px '+F;
-    ctx.shadowColor = 'rgba(255,200,60,0.3)'; ctx.shadowBlur = 10;
-    ctx.fillText(settings.bestScore.toLocaleString(), cardX+cardW-20, curY+myCardH/2-6);
+    ctx.font = 'bold 20px '+F;
+    ctx.shadowColor = 'rgba(255,200,60,0.25)'; ctx.shadowBlur = 8;
+    ctx.fillText(settings.bestScore.toLocaleString(), cX+cW-8, btmCy-4);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#8899BB';
-    ctx.font = '11px '+F;
-    ctx.fillText('BEST SCORE', cardX+cardW-20, curY+myCardH/2+14);
-  } else {
-    // Not logged in card
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#8899BB';
-    ctx.font = '14px '+F;
-    ctx.fillText('\u767B\u5165 LINE \u4F86\u8A18\u9304\u4F60\u7684\u5206\u6578', cx, curY+myCardH/2-10);
-    ctx.fillStyle = '#556677';
-    ctx.font = '12px '+F;
-    ctx.fillText('\u6700\u9AD8\u5206 '+settings.bestScore.toLocaleString(), cx, curY+myCardH/2+12);
-  }
-
-  curY += myCardH + 16;
-
-  // ── Section Divider ──
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  ctx.fillRect(cardX+20, curY, cardW-40, 1);
-  curY += 1;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#556677';
-  ctx.font = '11px '+F;
-  ctx.fillText('\uD83C\uDF0F \u5168\u7403\u6392\u884C Global Ranking', cx, curY+10);
-  curY += 26;
-
-  // ── Leaderboard Rows ──
-  const rowH = 56;
-  const maxShow = Math.min(entries.length, 10);
-  const rankColors = ['#FFD700','#C0C0C0','#CD7F32'];
-  const rankBg = ['rgba(255,215,0,0.08)','rgba(192,192,192,0.06)','rgba(205,127,50,0.05)'];
-
-  if (maxShow === 0 && !lbLoading) {
-    // Empty state — trophy icon + message
-    const emY = curY + 40;
-    ctx.font = '48px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.globalAlpha = 0.3;
-    ctx.fillText('\uD83C\uDFC6', cx, emY);
-    ctx.globalAlpha = 1;
     ctx.fillStyle = '#667788';
-    ctx.font = '15px '+F;
-    ctx.fillText('\u9084\u6C92\u6709\u4EBA\u4E0A\u699C', cx, emY+46);
+    ctx.font = '10px '+F;
+    ctx.fillText('BEST', cX+cW-8, btmCy+12);
+  } else {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#667788';
+    ctx.font = '13px '+F;
+    ctx.fillText('\u767B\u5165 LINE \u4F86\u8A18\u9304\u5206\u6578', cx, btmCy-6);
     ctx.fillStyle = '#556677';
     ctx.font = '12px '+F;
-    ctx.fillText('\u73A9\u904E\u904A\u6232\u5F8C\u5206\u6578\u6703\u81EA\u52D5\u4E0A\u50B3', cx, emY+68);
-  }
-
-  if (lbLoading && maxShow === 0) {
-    ctx.fillStyle = '#8899AA';
-    ctx.font = '14px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const dots = '.'.repeat(1 + Math.floor(now/500)%3);
-    ctx.fillText('\u8F09\u5165\u4E2D'+dots, cx, curY+50);
-  }
-
-  for (let i = 0; i < maxShow; i++) {
-    const entry = entries[i];
-    const ey = curY + i*rowH;
-    const isTop3 = i < 3;
-    const isMe = lineUser && entry.uid === lineUser.uid;
-    const rowCy = ey + rowH/2;
-
-    // Row background
-    if (isMe) {
-      ctx.fillStyle = 'rgba(85,119,255,0.12)';
-      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.fill();
-      ctx.strokeStyle = 'rgba(100,140,255,0.35)';
-      ctx.lineWidth = 1.5;
-      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.stroke();
-    } else if (isTop3) {
-      ctx.fillStyle = rankBg[i];
-      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.fill();
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.02)';
-      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.fill();
-    }
-
-    // Rank badge
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    if (isTop3) {
-      // Medal circle
-      const mg = ctx.createRadialGradient(cardX+26, rowCy-2, 0, cardX+26, rowCy-2, 14);
-      mg.addColorStop(0, rankColors[i]);
-      mg.addColorStop(1, rankColors[i]+'80');
-      ctx.fillStyle = mg;
-      ctx.beginPath(); ctx.arc(cardX+26, rowCy-2, 14, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = i===0?'#8B6914':i===1?'#555':'#5C3317';
-      ctx.font = 'bold 14px '+F;
-      ctx.fillText(String(i+1), cardX+26, rowCy-1);
-    } else {
-      ctx.fillStyle = '#556677';
-      ctx.font = 'bold 14px '+F;
-      ctx.fillText(String(i+1), cardX+26, rowCy-2);
-    }
-
-    // Avatar
-    const avX = cardX+60, avR = 18;
-    const fc = COLORS[i%COLORS.length].base;
-    _drawAvatar(entry.avatarImg, avX, rowCy-2, avR, fc, entry.name?entry.name[0]:'?');
-
-    // Name
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = isMe ? '#BBDDFF' : '#DDEEFF';
-    ctx.font = (isMe?'bold ':'600 ')+'15px '+F;
-    const dn = entry.name || 'Player';
-    ctx.fillText(dn.length>8?dn.slice(0,8)+'..':dn, cardX+86, rowCy-2);
-
-    // Score (right aligned)
-    ctx.textAlign = 'right';
-    ctx.fillStyle = isTop3 ? '#FFE680' : '#AABBCC';
-    ctx.font = 'bold 16px '+F;
-    ctx.fillText(entry.score.toLocaleString(), cardX+cardW-16, rowCy-2);
+    ctx.fillText('\u6700\u9AD8\u5206 '+settings.bestScore.toLocaleString(), cx, btmCy+10);
   }
 }
 
