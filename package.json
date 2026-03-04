@@ -1,0 +1,20 @@
+{
+  "name": "blocktopia",
+  "version": "1.0.0",
+  "description": "Blocktopia - Block Puzzle Game",
+  "private": true,
+  "scripts": {
+    "build": "echo 'Static HTML - no build needed' && mkdir -p dist && cp index.html dist/ && cp -r assets dist/",
+    "cap:init": "npx cap init Blocktopia com.blocktopia.app --web-dir dist",
+    "cap:android": "npx cap add android",
+    "cap:ios": "npx cap add ios",
+    "cap:sync": "npm run build && npx cap sync"
+  },
+  "dependencies": {
+    "@capacitor-community/admob": "^8.0.0",
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/ios": "^8.1.0"
+  }
+}
