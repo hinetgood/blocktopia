@@ -139,12 +139,6 @@ function lineLogin() {
   try {
     if (typeof liff === 'undefined') return;
     if (!liff.isLoggedIn()) {
-      // In iframe (e.g. itch.io), LINE auth page cannot load inside iframe
-      // Open LIFF URL in new tab — user logs in there and continues playing
-      if (window.self !== window.top) {
-        window.open('https://liff.line.me/' + LIFF_ID, '_blank');
-        return;
-      }
       liff.login({ redirectUri: window.location.href });
     }
   } catch(e) { console.warn('LINE login failed:', e); }
