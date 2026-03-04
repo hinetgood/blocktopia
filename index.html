@@ -1819,49 +1819,39 @@ function renderMenu(now) {
   ctx.font = '15px '+CUTE;
   ctx.fillText('Tap, Place, Clear!', cx, titleY + 38);
 
-  // Level Mode button — primary
+  // Play button — primary
   const btnW = 220, btnH = 50;
   const btn1Y = titleY + 72 - (1-e)*20;
   const btnX = cx - btnW/2;
-  ctx.shadowColor = 'rgba(100,60,255,0.4)';
+  ctx.shadowColor = 'rgba(76,175,80,0.4)';
   ctx.shadowBlur = 20;
   const btnGrad = ctx.createLinearGradient(btnX, btn1Y, btnX+btnW, btn1Y+btnH);
-  btnGrad.addColorStop(0, '#5577FF');
-  btnGrad.addColorStop(1, '#9944FF');
+  btnGrad.addColorStop(0, '#4CAF50');
+  btnGrad.addColorStop(1, '#2E8B31');
   ctx.fillStyle = btnGrad;
   roundRect(btnX, btn1Y, btnW, btnH, btnH/2); ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(180,160,255,0.3)';
+  ctx.strokeStyle = 'rgba(120,220,120,0.3)';
   ctx.lineWidth = 1.5;
   roundRect(btnX, btn1Y, btnW, btnH, btnH/2); ctx.stroke();
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 19px '+CUTE;
-  ctx.fillText('\uD83C\uDFAF \u95DC\u5361\u6A21\u5F0F Levels', cx, btn1Y + btnH/2);
-  hitAreas.playLevels = {x:btnX, y:btn1Y, w:btnW, h:btnH};
-
-  // Endless Mode button — secondary
-  const btn2Y = btn1Y + btnH + 14;
-  ctx.strokeStyle = 'rgba(76,175,80,0.5)';
-  ctx.lineWidth = 2;
-  roundRect(btnX, btn2Y, btnW, btnH, btnH/2); ctx.stroke();
-  ctx.fillStyle = '#4CAF50';
-  ctx.font = 'bold 19px '+CUTE;
-  ctx.fillText('\u221E \u7121\u76E1\u6A21\u5F0F Endless', cx, btn2Y + btnH/2);
-  hitAreas.play = {x:btnX, y:btn2Y, w:btnW, h:btnH};
+  ctx.fillText('\u25B6 \u958B\u59CB Play', cx, btn1Y + btnH/2);
+  hitAreas.play = {x:btnX, y:btn1Y, w:btnW, h:btnH};
 
   // Leaderboard button
-  const btn3Y = btn2Y + btnH + 14;
+  const btn2Y = btn1Y + btnH + 14;
   ctx.fillStyle = 'rgba(255,200,60,0.08)';
-  roundRect(btnX, btn3Y, btnW, btnH*0.85, btnH/2); ctx.fill();
+  roundRect(btnX, btn2Y, btnW, btnH*0.85, btnH/2); ctx.fill();
   ctx.fillStyle = '#ffd34e';
   ctx.font = 'bold 16px '+CUTE;
-  ctx.fillText('\uD83C\uDFC6 \u6392\u884C\u699C Leaderboard', cx, btn3Y + btnH*0.85/2);
-  hitAreas.leaderboard = {x:btnX, y:btn3Y, w:btnW, h:Math.round(btnH*0.85)};
+  ctx.fillText('\uD83C\uDFC6 \u6392\u884C\u699C Leaderboard', cx, btn2Y + btnH*0.85/2);
+  hitAreas.leaderboard = {x:btnX, y:btn2Y, w:btnW, h:Math.round(btnH*0.85)};
 
   // Best score
   ctx.fillStyle = '#556677';
   ctx.font = '13px '+CUTE;
-  ctx.fillText('BEST  '+settings.bestScore.toLocaleString(), cx, btn3Y + btnH*0.85 + 26);
+  ctx.fillText('BEST  '+settings.bestScore.toLocaleString(), cx, btn2Y + btnH*0.85 + 26);
 
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -3489,29 +3479,14 @@ function onDown(e) {
 
   switch(screen) {
     case SCR.MENU: {
-      // Level mode button
-      if (hitTest(p, hitAreas.playLevels)) {
-        sfx('click');
-        ensureAudio();
-        screen = SCR.LEVEL_SELECT;
-        levelSelectWorld = 0;
-        if (settings.musicOn) { bgmPlay(); }
-        return;
-      }
-      // Endless mode button
+      // Play button — go directly to game
       if (hitTest(p, hitAreas.play)) {
         sfx('click');
         ensureAudio();
         gameMode = 'endless';
         currentLevel = null;
-        if (!settings.tutorialSeen) {
-          screen = SCR.TUTORIAL;
-          tutorialStep = 0;
-          initState();
-        } else {
-          screen = SCR.PLAYING;
-          initState();
-        }
+        screen = SCR.PLAYING;
+        initState();
         if (settings.musicOn) { bgmPlay(); }
         return;
       }
