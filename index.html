@@ -311,13 +311,13 @@ PIECES.forEach(p => {
 let audioCtx = null;
 let _rvbNode = null, _rvbGain = null, _compNode = null, _masterGain = null;
 
-// BGM playback (BufferSource primary, direct <audio>.play() fallback)
-let _bgmBuffer = null;   // decoded AudioBuffer
-let _bgmNode = null;     // current BufferSourceNode
-let _bgmGain = null;     // gain node for volume
+// BGM playback — robust dual approach + debug indicator
+let _bgmBuffer = null;
+let _bgmNode = null;
+let _bgmGain = null;
 let _bgmPlaying = false;
 let _bgmLoading = false;
-let _bgmFetchFailed = false;
+let _bgmDebug = 'waiting';  // visible debug status (remove after fix confirmed)
 
 function ensureAudio() {
   if (!audioCtx) {
@@ -326,38 +326,68 @@ function ensureAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (!_masterGain) _initBus();
 
-  // Load BGM into Web Audio buffer on first gesture
-  if (!_bgmBuffer && !_bgmLoading && !_bgmFetchFailed && audioCtx) {
+  // Load BGM into Web Audio buffer via XHR (more compatible than fetch)
+  if (!_bgmBuffer && !_bgmLoading && audioCtx) {
     _bgmLoading = true;
-    fetch('assets/bgm.mp3')
-      .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); })
-      .then(buf => audioCtx.decodeAudioData(buf))
-      .then(decoded => {
-        _bgmBuffer = decoded;
+    _bgmDebug = 'XHR loading...';
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', 'assets/bgm.mp3', true);
+    xhr.responseType = 'arraybuffer';
+    xhr.onload = function() {
+      if (xhr.status === 200 || xhr.status === 0) {
+        _bgmDebug = 'decoding...';
+        // Use callback API (not Promise) for max mobile compat
+        audioCtx.decodeAudioData(xhr.response,
+          function(decoded) {
+            _bgmBuffer = decoded;
+            _bgmLoading = false;
+            _bgmDebug = 'decoded OK';
+            if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
+                screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
+              bgmPlay();
+            }
+          },
+          function(err) {
+            _bgmDebug = 'decode ERR: ' + (err && err.message || err);
+            _bgmLoading = false;
+            _tryAudioElementBGM();
+          }
+        );
+      } else {
+        _bgmDebug = 'XHR HTTP ' + xhr.status;
         _bgmLoading = false;
-        // Auto-start if music should be on
-        if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
-            screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
-          bgmPlay();
-        }
-      })
-      .catch(e => {
-        console.warn('BGM fetch/decode failed, using <audio> fallback:', e);
-        _bgmLoading = false;
-        _bgmFetchFailed = true;
-        // Try auto-start via fallback
-        if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
-            screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
-          bgmPlay();
-        }
-      });
+        _tryAudioElementBGM();
+      }
+    };
+    xhr.onerror = function() {
+      _bgmDebug = 'XHR network err';
+      _bgmLoading = false;
+      _tryAudioElementBGM();
+    };
+    xhr.send();
+  }
+}
+
+// Fallback: try <audio> element directly
+function _tryAudioElementBGM() {
+  if (!settings.musicOn) return;
+  if (!(screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
+      screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) return;
+  const el = document.getElementById('bgm');
+  if (el) {
+    el.volume = 0.35;
+    const p = el.play();
+    if (p && p.then) {
+      p.then(() => { _bgmPlaying = true; _bgmDebug = 'audio.play() OK'; })
+       .catch(e => { _bgmDebug = 'audio.play() ERR: ' + e.message; });
+    }
   }
 }
 
 function bgmPlay() {
   if (_bgmPlaying) return;
 
-  // Method 1: Web Audio BufferSource (best quality, no restrictions once decoded)
+  // Method 1: Web Audio BufferSource
   if (audioCtx && _bgmBuffer) {
     if (!_bgmGain) {
       _bgmGain = audioCtx.createGain();
@@ -370,15 +400,19 @@ function bgmPlay() {
     _bgmNode.connect(_bgmGain);
     _bgmNode.start(0);
     _bgmPlaying = true;
+    _bgmDebug = 'BufferSrc playing';
     return;
   }
 
-  // Method 2: Direct <audio> element play (most compatible, no Web Audio routing)
+  // Method 2: Direct <audio>.play()
   const el = document.getElementById('bgm');
   if (el) {
     el.volume = 0.35;
-    el.play().then(() => { _bgmPlaying = true; })
-      .catch(e => { console.warn('BGM <audio> play failed:', e); });
+    const p = el.play();
+    if (p && p.then) {
+      p.then(() => { _bgmPlaying = true; _bgmDebug = 'audio.play() OK'; })
+       .catch(e => { _bgmDebug = 'audio.play() ERR: ' + e.message; });
+    }
   }
 }
 
@@ -3405,6 +3439,14 @@ function render(now) {
     }
   }
 
+  ctx.restore();
+
+  // BGM debug indicator (temporary — remove after BGM fix confirmed)
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,0,0.7)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('BGM:' + _bgmDebug + ' m:' + (settings.musicOn?'ON':'OFF'), layout.w-4, 2);
   ctx.restore();
 
   // Clean expired anims
