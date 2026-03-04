@@ -769,6 +769,21 @@ let tutorialStep = 0;
 let menuAnim = 0; // timestamp for menu entrance animation
 let briefAnim = 0; // timestamp for level briefing entrance
 
+// Screen transition
+let _transFrom = -1, _transTo = -1, _transStart = 0;
+const TRANS_DUR = 300; // ms
+
+function setScreen(to) {
+  if (to === screen) return;
+  _transFrom = screen;
+  _transTo = to;
+  _transStart = performance.now();
+  screen = to;
+  // Keep existing special setup
+  if (to === SCR.MENU) menuAnim = performance.now();
+  if (to === SCR.LEVEL_BRIEF) briefAnim = performance.now();
+}
+
 // ============================================================
 //  HEARTS / LIVES SYSTEM
 // ============================================================
@@ -1488,7 +1503,7 @@ function checkClear() {
   // Recount obstacles
   if (gameMode==='level') countObstacles();
 
-  return {lines:fullRows.length+fullCols.length, cells, n:cells.length, iceBreaks};
+  return {lines:fullRows.length+fullCols.length, cells, n:cells.length, iceBreaks, fullRows, fullCols};
 }
 
 function canPlaceAnywhere(piece) {
@@ -1667,15 +1682,41 @@ function doPlace(idx, row, col) {
     const cx = L.gx + L.gw/2;
     const cy = L.gy + L.gw/2;
 
-    // Clear animations + particles
-    anims.push({type:'clear', cells:result.cells, start:now+60, dur:380});
-
-    // Particles per cleared cell (generous for impact)
-    const pCount = result.lines >= 3 ? 22 : result.lines >= 2 ? 14 : 8;
-    for (const cell of result.cells) {
-      spawnParticles(L.gx+cell.c*L.cs+L.cs/2, L.gy+cell.r*L.cs+L.cs/2, cell.ci, pCount,
-        {star: result.lines>=2, gravity:0.08, speed:2.5, speedVar:4, maxSize:4});
+    // Clear animations + particles — staggered per line for chain feel
+    const CHAIN_DELAY = 100; // ms between each line/col clear
+    const allLines = [...result.fullRows.map(r=>({type:'row',idx:r})), ...result.fullCols.map(c=>({type:'col',idx:c}))];
+    allLines.forEach((line, li) => {
+      const delay = li * CHAIN_DELAY;
+      const lineCells = result.cells.filter(cell => line.type==='row' ? cell.r===line.idx : cell.c===line.idx);
+      if (lineCells.length > 0) {
+        anims.push({type:'clear', cells:lineCells, start:now+60+delay, dur:380});
+      }
+    });
+    // Cells not belonging to any specific row/col (e.g. unlocked adjacent)
+    const coveredKeys = new Set();
+    allLines.forEach(line => {
+      result.cells.forEach(cell => {
+        if ((line.type==='row' && cell.r===line.idx) || (line.type==='col' && cell.c===line.idx))
+          coveredKeys.add(cell.r+','+cell.c);
+      });
+    });
+    const orphanCells = result.cells.filter(c => !coveredKeys.has(c.r+','+c.c));
+    if (orphanCells.length > 0) {
+      anims.push({type:'clear', cells:orphanCells, start:now+60+allLines.length*CHAIN_DELAY, dur:380});
     }
+
+    // Particles per cleared cell (generous for impact) — also staggered
+    const pCount = result.lines >= 3 ? 22 : result.lines >= 2 ? 14 : 8;
+    allLines.forEach((line, li) => {
+      const delay = li * CHAIN_DELAY;
+      const lineCells = result.cells.filter(cell => line.type==='row' ? cell.r===line.idx : cell.c===line.idx);
+      setTimeout(() => {
+        for (const cell of lineCells) {
+          spawnParticles(L.gx+cell.c*L.cs+L.cs/2, L.gy+cell.r*L.cs+L.cs/2, cell.ci, pCount,
+            {star: result.lines>=2, gravity:0.08, speed:2.5, speedVar:4, maxSize:4});
+        }
+      }, delay);
+    });
     // Extra white sparkle burst from center for 2+ lines
     if (result.lines >= 2) {
       spawnParticles(cx, cy, -1, result.lines >= 3 ? 30 : 15,
@@ -1768,7 +1809,7 @@ function doPlace(idx, row, col) {
         levelProgress.unlocked = Math.min(lid+1, LEVELS.length);
       }
       saveLevelProgress();
-      screen = SCR.LEVEL_CLEAR;
+      setScreen(SCR.LEVEL_CLEAR);
       return true;
     }
     if (state.movesLeft <= 0) {
@@ -1776,7 +1817,7 @@ function doPlace(idx, row, col) {
       state.gameOver = true;
       state.goAnimStart = performance.now();
       sfx('gameover');
-      screen = SCR.GAME_OVER;
+      setScreen(SCR.GAME_OVER);
       saveScoreToLeaderboard(state.score);
       tryShowInterstitial();
       return true;
@@ -1787,7 +1828,7 @@ function doPlace(idx, row, col) {
     state.gameOver = true;
     state.goAnimStart = performance.now();
     sfx('gameover');
-    screen = SCR.GAME_OVER;
+    setScreen(SCR.GAME_OVER);
     saveScoreToLeaderboard(state.score);
     tryShowInterstitial();
   }
@@ -2208,14 +2249,42 @@ function drawHeader(now) {
   ctx.font = 'bold 18px "Segoe UI",-apple-system,system-ui,sans-serif';
   ctx.fillText(state.best.toLocaleString(), L.gx + L.gw - 36, L.headerH/2 + 14);
 
-  // Hearts indicator (top-right corner)
+  // Hearts indicator (top-right, canvas-drawn)
   recoverHearts();
-  ctx.textAlign = 'right';
-  ctx.font = '13px "Segoe UI",-apple-system,system-ui,sans-serif';
-  ctx.fillStyle = '#FF6B6B';
-  let hs = '';
-  for (let i = 0; i < HEARTS_MAX; i++) hs += i < hearts.current ? '\u2764' : '\u2661';
-  ctx.fillText(hs, L.gx + L.gw, 14);
+  const heartSize = 13, heartGap = 3;
+  const totalHW = HEARTS_MAX * (heartSize + heartGap) - heartGap;
+  const heartStartX = L.gx + L.gw - totalHW;
+  const heartY = 10;
+  for (let i = 0; i < HEARTS_MAX; i++) {
+    const hx = heartStartX + i * (heartSize + heartGap) + heartSize/2;
+    const hy = heartY + heartSize/2;
+    const s = heartSize * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + s * 0.3);
+    ctx.bezierCurveTo(hx, hy - s*0.5, hx - s, hy - s*0.8, hx - s, hy);
+    ctx.bezierCurveTo(hx - s, hy + s*0.6, hx, hy + s, hx, hy + s*1.2);
+    ctx.bezierCurveTo(hx, hy + s, hx + s, hy + s*0.6, hx + s, hy);
+    ctx.bezierCurveTo(hx + s, hy - s*0.8, hx, hy - s*0.5, hx, hy + s*0.3);
+    ctx.closePath();
+    if (i < hearts.current) {
+      ctx.fillStyle = '#FF4466';
+      ctx.shadowColor = '#FF4466';
+      ctx.shadowBlur = 4;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.strokeStyle = 'rgba(255,68,102,0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+  if (hearts.current < HEARTS_MAX) {
+    const nextMs = getNextHeartTime();
+    ctx.textAlign = 'right';
+    ctx.font = '600 9px "Segoe UI",-apple-system,system-ui,sans-serif';
+    ctx.fillStyle = '#FF8899';
+    ctx.fillText('+1 ' + formatTime(nextMs), L.gx + L.gw, heartY + heartSize + 10);
+  }
 
   // Streak badge (center of header)
   if (state.streak >= 2 && !state.gameOver) {
@@ -2238,18 +2307,25 @@ function drawHeader(now) {
     ctx.globalAlpha = 1;
   }
 
-  // Gear icon (top-right, doesn't overlap BEST score)
+  // Gear/pause icon (top-right, with background circle for visibility)
   const gx = L.gx + L.gw - 14;
   const gy = L.headerH/2 - 18;
-  drawGearIcon(gx, gy, 22);
-  hitAreas.gear = {x:gx-14, y:gy-14, w:28, h:28};
+  ctx.beginPath();
+  ctx.arc(gx, gy, 16, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  drawGearIcon(gx, gy, 24);
+  hitAreas.gear = {x:gx-18, y:gy-18, w:36, h:36};
 }
 
 function drawGearIcon(cx, cy, s) {
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.strokeStyle = '#667788';
-  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = '#99AABB';
+  ctx.lineWidth = 1.6;
   const teeth = 8, outer = s*0.42, inner = s*0.30;
   ctx.beginPath();
   for (let i=0;i<teeth*2;i++){
@@ -4158,6 +4234,19 @@ function render(now) {
 
   ctx.restore();
 
+  // Screen transition overlay
+  if (_transStart > 0) {
+    const tp = (now - _transStart) / TRANS_DUR;
+    if (tp < 1) {
+      // Fade: first half = fade to dark, second half = fade from dark
+      const alpha = tp < 0.5 ? tp * 2 : (1 - tp) * 2;
+      ctx.fillStyle = `rgba(12,16,30,${alpha * 0.7})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+      _transStart = 0;
+    }
+  }
+
   // Clean expired anims
   for (let i=anims.length-1; i>=0; i--) {
     if (now-anims[i].start >= anims[i].dur) anims.splice(i,1);
@@ -4225,7 +4314,7 @@ function onDown(e) {
         useHeart();
         gameMode = 'endless';
         currentLevel = null;
-        screen = SCR.PLAYING;
+        setScreen(SCR.PLAYING);
         initState();
         if (settings.musicOn) { bgmPlay(); }
         return;
@@ -4241,7 +4330,7 @@ function onDown(e) {
       // Leaderboard button
       if (hitTest(p, hitAreas.leaderboard)) {
         sfx('click');
-        screen = SCR.LEADERBOARD;
+        setScreen(SCR.LEADERBOARD);
         lbLastFetch = 0; // force refresh
         hitAreas.lineLogin = null;
         return;
@@ -4258,8 +4347,7 @@ function onDown(e) {
       // Back button
       if (hitTest(p, hitAreas.lsBack)) {
         sfx('click');
-        screen = SCR.MENU;
-        menuAnim = performance.now();
+        setScreen(SCR.MENU);
         return;
       }
       // World navigation
@@ -4279,8 +4367,7 @@ function onDown(e) {
           if (hitTest(p, node) && node.unlocked) {
             sfx('click');
             currentLevel = node.lvl;
-            screen = SCR.LEVEL_BRIEF;
-            briefAnim = performance.now();
+            setScreen(SCR.LEVEL_BRIEF);
             return;
           }
         }
@@ -4295,7 +4382,7 @@ function onDown(e) {
         if (hearts.current <= 0) { sfx('deny'); return; }
         useHeart();
         currentLevel = LEVELS[currentLevel.id];
-        screen = SCR.PLAYING;
+        setScreen(SCR.PLAYING);
         initState();
         return;
       }
@@ -4305,14 +4392,14 @@ function onDown(e) {
         recoverHearts();
         if (hearts.current <= 0) { sfx('deny'); return; }
         useHeart();
-        screen = SCR.PLAYING;
+        setScreen(SCR.PLAYING);
         initState();
         return;
       }
       // Back to level select
       if (hitTest(p, hitAreas.lcLevels)) {
         sfx('click');
-        screen = SCR.LEVEL_SELECT;
+        setScreen(SCR.LEVEL_SELECT);
         levelSelectWorld = currentLevel ? Math.floor((currentLevel.id-1)/5) : 0;
         return;
       }
@@ -4321,8 +4408,7 @@ function onDown(e) {
     case SCR.LEADERBOARD: {
       if (hitTest(p, hitAreas.lbBack)) {
         sfx('click');
-        screen = SCR.MENU;
-        menuAnim = performance.now();
+        setScreen(SCR.MENU);
         return;
       }
       // LINE Login button
@@ -4342,7 +4428,7 @@ function onDown(e) {
         if (hearts.current <= 0) { sfx('deny'); return; }
         useHeart();
         gameMode = 'level';
-        screen = SCR.PLAYING;
+        setScreen(SCR.PLAYING);
         initState();
         if (settings.musicOn) { bgmPlay(); }
         return;
@@ -4350,7 +4436,7 @@ function onDown(e) {
       // Back button — return to level select
       if (hitTest(p, hitAreas.briefBack)) {
         sfx('click');
-        screen = SCR.LEVEL_SELECT;
+        setScreen(SCR.LEVEL_SELECT);
         return;
       }
       break;
@@ -4359,7 +4445,7 @@ function onDown(e) {
       // Gear button
       if (hitTest(p, hitAreas.gear)) {
         sfx('click');
-        screen = SCR.PAUSED;
+        setScreen(SCR.PAUSED);
         return;
       }
       // Undo button
@@ -4400,14 +4486,13 @@ function onDown(e) {
       // Resume
       if (hitTest(p, hitAreas.resume)) {
         sfx('click');
-        screen = SCR.PLAYING;
+        setScreen(SCR.PLAYING);
         return;
       }
       // Quit
       if (hitTest(p, hitAreas.quit)) {
         sfx('click');
-        screen = SCR.MENU;
-        menuAnim = 0;
+        setScreen(SCR.MENU);
         bgmStop();
         return;
       }
@@ -4422,7 +4507,7 @@ function onDown(e) {
             _adUsedThisRound = true;
             state.movesLeft = 3;
             state.gameOver = false;
-            screen = SCR.PLAYING;
+            setScreen(SCR.PLAYING);
           }
         });
         return;
@@ -4434,18 +4519,17 @@ function onDown(e) {
         useHeart();
         _adUsedThisRound = false;
         if (gameMode === 'level' && currentLevel) {
-          screen = SCR.PLAYING;
+          setScreen(SCR.PLAYING);
           initState();
         } else {
-          screen = SCR.PLAYING;
+          setScreen(SCR.PLAYING);
           initState();
         }
       }
       if (hitTest(p, hitAreas.goHome)) {
         sfx('click');
         _adUsedThisRound = false;
-        screen = SCR.MENU;
-        menuAnim = 0;
+        setScreen(SCR.MENU);
         bgmStop();
       }
       break;
@@ -4456,7 +4540,7 @@ function onDown(e) {
       if (tutorialStep >= TUTORIAL_STEPS.length) {
         settings.tutorialSeen = true;
         saveSettings();
-        screen = SCR.PLAYING;
+        setScreen(SCR.PLAYING);
       }
       break;
     }
