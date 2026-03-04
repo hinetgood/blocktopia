@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-<audio id="bgm" loop preload="auto" playsinline crossorigin="anonymous" src="assets/Sunny%20Little%20Puzzle%20Loop.mp3"></audio>
+<audio id="bgm" loop preload="auto" playsinline src="assets/bgm.mp3"></audio>
 <canvas id="c"></canvas>
 <!-- LINE LIFF SDK -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -311,13 +311,12 @@ PIECES.forEach(p => {
 let audioCtx = null;
 let _rvbNode = null, _rvbGain = null, _compNode = null, _masterGain = null;
 
-// BGM via Web Audio API (dual: BufferSource primary, MediaElement fallback)
+// BGM playback (BufferSource primary, direct <audio>.play() fallback)
 let _bgmBuffer = null;   // decoded AudioBuffer
 let _bgmNode = null;     // current BufferSourceNode
 let _bgmGain = null;     // gain node for volume
 let _bgmPlaying = false;
 let _bgmLoading = false;
-let _bgmMediaSrc = null; // MediaElementSourceNode (fallback)
 let _bgmFetchFailed = false;
 
 function ensureAudio() {
@@ -330,7 +329,7 @@ function ensureAudio() {
   // Load BGM into Web Audio buffer on first gesture
   if (!_bgmBuffer && !_bgmLoading && !_bgmFetchFailed && audioCtx) {
     _bgmLoading = true;
-    fetch('assets/Sunny%20Little%20Puzzle%20Loop.mp3')
+    fetch('assets/bgm.mp3')
       .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); })
       .then(buf => audioCtx.decodeAudioData(buf))
       .then(decoded => {
@@ -356,17 +355,15 @@ function ensureAudio() {
 }
 
 function bgmPlay() {
-  if (!audioCtx || _bgmPlaying) return;
+  if (_bgmPlaying) return;
 
-  // Ensure gain node
-  if (!_bgmGain) {
-    _bgmGain = audioCtx.createGain();
-    _bgmGain.connect(audioCtx.destination);
-  }
-  _bgmGain.gain.value = 0.35;
-
-  // Method 1: Web Audio BufferSource (best quality)
-  if (_bgmBuffer) {
+  // Method 1: Web Audio BufferSource (best quality, no restrictions once decoded)
+  if (audioCtx && _bgmBuffer) {
+    if (!_bgmGain) {
+      _bgmGain = audioCtx.createGain();
+      _bgmGain.connect(audioCtx.destination);
+    }
+    _bgmGain.gain.value = 0.35;
     _bgmNode = audioCtx.createBufferSource();
     _bgmNode.buffer = _bgmBuffer;
     _bgmNode.loop = true;
@@ -376,25 +373,20 @@ function bgmPlay() {
     return;
   }
 
-  // Method 2: <audio> element routed through Web Audio API (fallback)
+  // Method 2: Direct <audio> element play (most compatible, no Web Audio routing)
   const el = document.getElementById('bgm');
   if (el) {
-    if (!_bgmMediaSrc) {
-      try { _bgmMediaSrc = audioCtx.createMediaElementSource(el); } catch(e) { /* already connected */ }
-      if (_bgmMediaSrc) _bgmMediaSrc.connect(_bgmGain);
-    }
-    el.currentTime = 0;
-    el.play().then(() => { _bgmPlaying = true; }).catch(() => {});
+    el.volume = 0.35;
+    el.play().then(() => { _bgmPlaying = true; })
+      .catch(e => { console.warn('BGM <audio> play failed:', e); });
   }
 }
 
 function bgmStop() {
-  // Stop BufferSource if active
   if (_bgmNode) {
     try { _bgmNode.stop(); } catch(e) {}
     _bgmNode = null;
   }
-  // Pause <audio> element if used as fallback
   const el = document.getElementById('bgm');
   if (el && !el.paused) el.pause();
   _bgmPlaying = false;
