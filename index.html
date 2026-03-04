@@ -35,17 +35,24 @@ const GRID = 8;
 const GAP  = 3;
 
 // ============================================================
-//  ADMOB — Rewarded Video (Capacitor plugin)
+//  ADMOB — Rewarded Video + Interstitial (Capacitor plugin)
 // ============================================================
 const AD_CONFIG = {
   // Replace with your real AdMob unit IDs before publishing
   rewarded: {
     android: 'ca-app-pub-3940256099942544/5224354917', // test ID
     ios:     'ca-app-pub-3940256099942544/1712485313', // test ID
+  },
+  interstitial: {
+    android: 'ca-app-pub-3940256099942544/1033173712', // test ID
+    ios:     'ca-app-pub-3940256099942544/4411468910', // test ID
   }
 };
 let _adReady = false;
 let _adUsedThisRound = false;
+let _interstitialReady = false;
+let _gameOverCount = 0;
+const INTERSTITIAL_EVERY = 3; // show interstitial every N game overs
 
 async function initAdMob() {
   // Only works inside Capacitor native app
@@ -54,6 +61,7 @@ async function initAdMob() {
   try {
     await AdMob.initialize({ initializeForTesting: true });
     _prepareRewardedAd();
+    _prepareInterstitial();
   } catch(e) { console.warn('AdMob init failed:', e); }
 }
 
@@ -80,6 +88,33 @@ async function showRewardedAd() {
     _adReady = false;
     _prepareRewardedAd();
     return false;
+  }
+}
+
+async function _prepareInterstitial() {
+  if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return;
+  const { AdMob } = Capacitor.Plugins;
+  const platform = Capacitor.getPlatform();
+  const adId = platform === 'ios' ? AD_CONFIG.interstitial.ios : AD_CONFIG.interstitial.android;
+  try {
+    await AdMob.prepareInterstitial({ adId });
+    _interstitialReady = true;
+  } catch(e) { _interstitialReady = false; }
+}
+
+async function tryShowInterstitial() {
+  _gameOverCount++;
+  if (_gameOverCount % INTERSTITIAL_EVERY !== 0) return;
+  if (!_interstitialReady) return;
+  if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return;
+  const { AdMob } = Capacitor.Plugins;
+  try {
+    await AdMob.showInterstitial();
+    _interstitialReady = false;
+    _prepareInterstitial();
+  } catch(e) {
+    _interstitialReady = false;
+    _prepareInterstitial();
   }
 }
 
@@ -620,6 +655,14 @@ function sfx(type) {
       _oscW('sine', 65, t, 0.5, 0.12, 0.4);
       break;
     }
+    case 'deny': {
+      // Buzzer — two descending tones
+      const o1 = _osc('square', 350, t, 0.15, 0.08);
+      o1.o.frequency.exponentialRampToValueAtTime(180, t + 0.15);
+      _osc('square', 280, t + 0.16, 0.15, 0.06);
+      _nBurst(t, 0.06, 600, 1, 0.04);
+      break;
+    }
   }
 }
 
@@ -725,6 +768,62 @@ let hitAreas = {};
 let tutorialStep = 0;
 let menuAnim = 0; // timestamp for menu entrance animation
 let briefAnim = 0; // timestamp for level briefing entrance
+
+// ============================================================
+//  HEARTS / LIVES SYSTEM
+// ============================================================
+const HEARTS_MAX = 5;
+const HEARTS_RECOVER_MS = 30 * 60 * 1000; // 30 minutes per heart
+let hearts = { current: HEARTS_MAX, lastRecover: Date.now() };
+
+function loadHearts() {
+  try {
+    const d = JSON.parse(localStorage.getItem('blocktopia_hearts'));
+    if (d) {
+      hearts.current = d.current;
+      hearts.lastRecover = d.lastRecover;
+    }
+  } catch {}
+  recoverHearts();
+}
+function saveHearts() {
+  try { localStorage.setItem('blocktopia_hearts', JSON.stringify(hearts)); } catch {}
+}
+function recoverHearts() {
+  if (hearts.current >= HEARTS_MAX) {
+    hearts.lastRecover = Date.now();
+    return;
+  }
+  const elapsed = Date.now() - hearts.lastRecover;
+  const recovered = Math.floor(elapsed / HEARTS_RECOVER_MS);
+  if (recovered > 0) {
+    hearts.current = Math.min(HEARTS_MAX, hearts.current + recovered);
+    hearts.lastRecover = hearts.lastRecover + recovered * HEARTS_RECOVER_MS;
+    if (hearts.current >= HEARTS_MAX) hearts.lastRecover = Date.now();
+    saveHearts();
+  }
+}
+function useHeart() {
+  recoverHearts();
+  if (hearts.current <= 0) return false;
+  hearts.current--;
+  saveHearts();
+  return true;
+}
+function addHeart(n) {
+  hearts.current = Math.min(HEARTS_MAX, hearts.current + (n||1));
+  saveHearts();
+}
+function getNextHeartTime() {
+  if (hearts.current >= HEARTS_MAX) return 0;
+  const elapsed = Date.now() - hearts.lastRecover;
+  return Math.max(0, HEARTS_RECOVER_MS - elapsed);
+}
+function formatTime(ms) {
+  const m = Math.floor(ms/60000);
+  const s = Math.floor((ms%60000)/1000);
+  return m + ':' + (s<10?'0':'') + s;
+}
 
 // Level mode
 let gameMode = 'endless'; // 'endless' | 'level'
@@ -1638,6 +1737,7 @@ function doPlace(idx, row, col) {
       sfx('gameover');
       screen = SCR.GAME_OVER;
       saveScoreToLeaderboard(state.score);
+      tryShowInterstitial();
       return true;
     }
   }
@@ -1648,6 +1748,7 @@ function doPlace(idx, row, col) {
     sfx('gameover');
     screen = SCR.GAME_OVER;
     saveScoreToLeaderboard(state.score);
+    tryShowInterstitial();
   }
   return true;
 }
@@ -1881,8 +1982,48 @@ function renderMenu(now) {
   ctx.fillText('\u25B6 \u958B\u59CB Play', cx, btn1Y + btnH/2);
   hitAreas.play = {x:btnX, y:btn1Y, w:btnW, h:btnH};
 
+  // Hearts display
+  recoverHearts();
+  const heartsY = btn1Y + btnH + 12;
+  ctx.globalAlpha = e;
+  ctx.font = '18px '+CUTE;
+  ctx.textAlign = 'center';
+  let heartsStr = '';
+  for (let i = 0; i < HEARTS_MAX; i++) {
+    heartsStr += i < hearts.current ? '\u2764\uFE0F' : '\uD83E\uDE76';
+  }
+  ctx.fillStyle = hearts.current > 0 ? '#FF6B6B' : '#666';
+  ctx.fillText(heartsStr, cx, heartsY + 10);
+
+  // Timer or watch-ad button when low hearts
+  let heartsExtraH = 24;
+  if (hearts.current < HEARTS_MAX) {
+    const nextMs = getNextHeartTime();
+    ctx.font = '12px '+CUTE;
+    ctx.fillStyle = '#778899';
+    ctx.fillText('\u2764\uFE0F +1 in ' + formatTime(nextMs), cx, heartsY + 26);
+    heartsExtraH = 40;
+  }
+  if (hearts.current <= 0) {
+    // Watch Ad button
+    const adBW = 180, adBH = 36;
+    const adBX = cx-adBW/2, adBY = heartsY + 30;
+    ctx.fillStyle = 'rgba(255,100,100,0.15)';
+    roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,100,100,0.4)';
+    ctx.lineWidth = 1;
+    roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.stroke();
+    ctx.fillStyle = '#FF6B6B';
+    ctx.font = 'bold 14px '+CUTE;
+    ctx.fillText('\uD83C\uDFAC \u770B\u5EE3\u544A +\u2764\uFE0F', cx, adBY + adBH/2);
+    hitAreas.watchAdHeart = {x:adBX, y:adBY, w:adBW, h:adBH};
+    heartsExtraH = 72;
+  } else {
+    hitAreas.watchAdHeart = null;
+  }
+
   // Leaderboard button
-  const btn2Y = btn1Y + btnH + 14;
+  const btn2Y = btn1Y + btnH + 14 + heartsExtraH;
   ctx.fillStyle = 'rgba(255,200,60,0.08)';
   roundRect(btnX, btn2Y, btnW, btnH*0.85, btnH/2); ctx.fill();
   ctx.fillStyle = '#ffd34e';
@@ -1958,6 +2099,15 @@ function drawHeader(now) {
   ctx.fillStyle = '#889AAB';
   ctx.font = 'bold 18px "Segoe UI",-apple-system,system-ui,sans-serif';
   ctx.fillText(state.best.toLocaleString(), L.gx + L.gw - 36, L.headerH/2 + 14);
+
+  // Hearts indicator (top-right corner)
+  recoverHearts();
+  ctx.textAlign = 'right';
+  ctx.font = '13px "Segoe UI",-apple-system,system-ui,sans-serif';
+  ctx.fillStyle = '#FF6B6B';
+  let hs = '';
+  for (let i = 0; i < HEARTS_MAX; i++) hs += i < hearts.current ? '\u2764' : '\u2661';
+  ctx.fillText(hs, L.gx + L.gw, 14);
 
   // Streak badge (center of header)
   if (state.streak >= 2 && !state.gameOver) {
@@ -3808,11 +3958,26 @@ function onDown(e) {
       if (hitTest(p, hitAreas.play)) {
         sfx('click');
         ensureAudio();
+        recoverHearts();
+        if (hearts.current <= 0) {
+          // No hearts — show ad to get heart
+          sfx('deny');
+          return;
+        }
+        useHeart();
         gameMode = 'endless';
         currentLevel = null;
         screen = SCR.PLAYING;
         initState();
         if (settings.musicOn) { bgmPlay(); }
+        return;
+      }
+      // Watch Ad for heart button
+      if (hitAreas.watchAdHeart && hitTest(p, hitAreas.watchAdHeart)) {
+        sfx('click');
+        showRewardedAd().then(ok => {
+          if (ok) { addHeart(1); }
+        });
         return;
       }
       // Leaderboard button
@@ -3868,7 +4033,10 @@ function onDown(e) {
       // Next level
       if (hitTest(p, hitAreas.lcNext) && currentLevel && currentLevel.id < LEVELS.length) {
         sfx('click');
-        currentLevel = LEVELS[currentLevel.id]; // next level (0-indexed array, id is 1-indexed)
+        recoverHearts();
+        if (hearts.current <= 0) { sfx('deny'); return; }
+        useHeart();
+        currentLevel = LEVELS[currentLevel.id];
         screen = SCR.PLAYING;
         initState();
         return;
@@ -3876,6 +4044,9 @@ function onDown(e) {
       // Replay
       if (hitTest(p, hitAreas.lcReplay)) {
         sfx('click');
+        recoverHearts();
+        if (hearts.current <= 0) { sfx('deny'); return; }
+        useHeart();
         screen = SCR.PLAYING;
         initState();
         return;
@@ -3909,6 +4080,9 @@ function onDown(e) {
       if (hitTest(p, hitAreas.briefGo)) {
         sfx('click');
         ensureAudio();
+        recoverHearts();
+        if (hearts.current <= 0) { sfx('deny'); return; }
+        useHeart();
         gameMode = 'level';
         screen = SCR.PLAYING;
         initState();
@@ -3997,6 +4171,9 @@ function onDown(e) {
       }
       if (hitTest(p, hitAreas.restart)) {
         sfx('click');
+        recoverHearts();
+        if (hearts.current <= 0) { sfx('deny'); return; }
+        useHeart();
         _adUsedThisRound = false;
         if (gameMode === 'level' && currentLevel) {
           screen = SCR.PLAYING;
@@ -4080,6 +4257,7 @@ function loop(now) {
 // ============================================================
 loadSettings();
 loadLevelProgress();
+loadHearts();
 resizeCanvas();
 initState();
 menuAnim = performance.now();
