@@ -1002,7 +1002,7 @@ function drawBlock(x, y, s, ci, alpha) {
   roundRect(x, y + s * 0.72, s, s * 0.28, r * 0.5); ctx.fill();
 
   // Layer 4: Radial glass highlight (candy curve)
-  ctx.globalAlpha = a * 0.32;
+  ctx.globalAlpha = a * 0.40;
   const glass = ctx.createRadialGradient(
     x + s * 0.38, y + s * 0.14, 0,
     x + s * 0.38, y + s * 0.14, s * 0.62
@@ -1019,7 +1019,7 @@ function drawBlock(x, y, s, ci, alpha) {
   roundRect(x + s * 0.14, y + s * 0.07, s * 0.52, s * 0.075, s * 0.04); ctx.fill();
 
   // Layer 6: Primary specular dot (bright candy shine)
-  ctx.globalAlpha = a * 0.52;
+  ctx.globalAlpha = a * 0.65;
   ctx.fillStyle = '#fff';
   ctx.beginPath();
   ctx.arc(x + s * 0.27, y + s * 0.21, Math.max(1.5, s * 0.068), 0, Math.PI * 2); ctx.fill();
@@ -1028,17 +1028,58 @@ function drawBlock(x, y, s, ci, alpha) {
   ctx.beginPath();
   ctx.arc(x + s * 0.44, y + s * 0.15, Math.max(1, s * 0.032), 0, Math.PI * 2); ctx.fill();
 
-  // Layer 7: Rim Light (colored glow border)
+  // Layer 7: Rim Light (colored glow border) — neon glow
   ctx.globalAlpha = a * 0.55;
   ctx.strokeStyle = c.rim;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = c.rim;
+  ctx.shadowBlur = 4;
   roundRect(x + 0.5, y + 0.5, s - 1, s - 1, r); ctx.stroke();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
   // Layer 8: Inner top-edge glow
   ctx.globalAlpha = a * 0.13;
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 0.5;
   roundRect(x + 1.5, y + 1, s - 3, s * 0.38, r); ctx.stroke();
+
+  // Layer 9: Diamond-cut facet lines (gem effect)
+  ctx.globalAlpha = a * 0.12;
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x + s * 0.15, y + s * 0.5);
+  ctx.lineTo(x + s * 0.5, y + s * 0.15);
+  ctx.lineTo(x + s * 0.85, y + s * 0.5);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + s * 0.15, y + s * 0.5);
+  ctx.lineTo(x + s * 0.5, y + s * 0.85);
+  ctx.lineTo(x + s * 0.85, y + s * 0.5);
+  ctx.stroke();
+
+  // Layer 10: Neon glow outer border
+  ctx.globalAlpha = a * 0.35;
+  ctx.strokeStyle = c.rim;
+  ctx.lineWidth = 1;
+  ctx.shadowColor = c.rim;
+  ctx.shadowBlur = 7;
+  roundRect(x, y, s, s, r); ctx.stroke();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+  // Layer 11: Animated sparkle dot (diamond-shaped)
+  const sparkleT = (performance.now() * 0.003 + x * 0.1 + y * 0.07) % (Math.PI * 2);
+  const sparkleA = Math.max(0, Math.sin(sparkleT));
+  if (sparkleA > 0.15) {
+    ctx.globalAlpha = a * sparkleA * 0.8;
+    ctx.fillStyle = '#fff';
+    const sx = x + s * 0.75, sy = y + s * 0.22, sr = Math.max(1, s * 0.055);
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-sr, -sr, sr * 2, sr * 2);
+    ctx.restore();
+  }
 
   ctx.globalAlpha = 1;
 }
@@ -1653,7 +1694,7 @@ function doPlace(idx, row, col) {
     // Combo badge
     if (result.lines >= 2) {
       sfxCombo();
-      anims.push({type:'combo', text:'COMBO x'+result.lines, x:cx, y:cy-70, start:now+120, dur:1300});
+      anims.push({type:'combo', text:'x'+result.lines+' COMBO!', score:'+'+clearScore, x:cx, y:cy-50, start:now+120, dur:1500});
     }
 
     // Screen shake (intensified)
@@ -1930,7 +1971,7 @@ function renderMenu(now) {
     ctx.beginPath(); ctx.arc(cx+8, mascotY-3, 3, 0, Math.PI*2); ctx.fill();
   }
 
-  // Title: "Blocktopia" with gold glow
+  // Title: "Blocktopia" with rainbow gradient
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -1938,21 +1979,36 @@ function renderMenu(now) {
   const titleY = mascotY + mascotS/2 + 30;
   ctx.globalAlpha = e;
 
-  // Gold glow
-  ctx.shadowColor = 'rgba(255,200,60,0.7)';
-  ctx.shadowBlur = 40;
-  ctx.fillStyle = '#FFD700';
+  // Measure text width for gradient
   ctx.font = 'bold 48px '+CUTE;
+  const titleW = ctx.measureText('Blocktopia').width;
+
+  // Rainbow gradient with animated offset
+  const rainbowShift = (now * 0.0004) % 1;
+  const rainGrad = ctx.createLinearGradient(cx - titleW/2, titleY, cx + titleW/2, titleY);
+  const rainColors = ['#FF0000','#FF8800','#FFDD00','#00DD00','#00DDDD','#0044FF','#8800FF'];
+  for (let ri=0; ri<rainColors.length; ri++) {
+    const stop = ((ri/(rainColors.length-1)) + rainbowShift) % 1;
+    rainGrad.addColorStop(stop, rainColors[ri]);
+  }
+  // Ensure gradient wraps smoothly
+  rainGrad.addColorStop(0, rainColors[Math.floor(rainbowShift * (rainColors.length-1)) % rainColors.length]);
+
+  // Cycling hue glow
+  const hueAngle = (now * 0.001) % 360;
+  ctx.shadowColor = `hsl(${hueAngle}, 100%, 60%)`;
+  ctx.shadowBlur = 40;
+  ctx.fillStyle = rainGrad;
   ctx.fillText('Blocktopia', cx, titleY);
   ctx.fillText('Blocktopia', cx, titleY);
-  ctx.strokeStyle = 'rgba(255,170,0,0.5)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
   ctx.lineWidth = 1.5;
   ctx.strokeText('Blocktopia', cx, titleY);
   ctx.shadowBlur = 0;
 
-  // Shimmer
+  // Shimmer animation (shifting white overlay)
   const shimmer = 0.5 + Math.sin(now * 0.003) * 0.3;
-  ctx.globalAlpha = e * shimmer * 0.15;
+  ctx.globalAlpha = e * shimmer * 0.18;
   ctx.fillStyle = '#fff';
   ctx.fillText('Blocktopia', cx, titleY);
   ctx.globalAlpha = e;
@@ -2496,12 +2552,50 @@ function renderAnims(now) {
       case 'combo': {
         const s = t<0.15?1.6-easeOut3(t/0.15)*0.6:1;
         const fade = t>0.6?1-(t-0.6)/0.4:(t<0.08?t/0.08:1);
-        ctx.globalAlpha = Math.max(0,fade);
-        ctx.fillStyle = '#ffd34e';
-        ctx.font = `bold ${Math.round(28*s)}px "Segoe UI",-apple-system,system-ui,sans-serif`;
+        const comboAlpha = Math.max(0,fade);
+        ctx.globalAlpha = comboAlpha;
+
+        // Radiating light rays behind text
+        ctx.save();
+        ctx.translate(a.x, a.y);
+        const rayCount = 6;
+        const rayLen = 60 * s;
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1.5;
+        for (let ri=0; ri<rayCount; ri++) {
+          const ang = (ri/rayCount)*Math.PI*2 + now*0.001;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(ang)*rayLen, Math.sin(ang)*rayLen);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Gold shadow layer
+        const comboFontSize = Math.round(48*s);
+        ctx.font = `bold ${comboFontSize}px "Segoe UI",-apple-system,system-ui,sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(255,200,0,0.4)'; ctx.shadowBlur = 12;
+        ctx.shadowColor = 'rgba(255,170,0,0.8)'; ctx.shadowBlur = 22;
+        ctx.fillStyle = '#B8860B';
+        ctx.fillText(a.text, a.x+1, a.y+2);
+
+        // Bright gold fill layer
+        const goldGrad = ctx.createLinearGradient(a.x-80, a.y-20, a.x+80, a.y+20);
+        goldGrad.addColorStop(0, '#FFD700');
+        goldGrad.addColorStop(0.5, '#FFF8DC');
+        goldGrad.addColorStop(1, '#FFD700');
+        ctx.fillStyle = goldGrad;
+        ctx.shadowColor = 'rgba(255,200,0,0.6)'; ctx.shadowBlur = 25;
         ctx.fillText(a.text, a.x, a.y);
+
+        // Score text below
+        if (a.score) {
+          ctx.font = `bold ${Math.round(24*s)}px "Segoe UI",-apple-system,system-ui,sans-serif`;
+          ctx.fillStyle = '#FFEE88';
+          ctx.shadowColor = 'rgba(255,200,0,0.5)'; ctx.shadowBlur = 15;
+          ctx.fillText(a.score, a.x, a.y + comboFontSize*0.7);
+        }
+
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
         break;
@@ -2531,15 +2625,47 @@ function renderAnims(now) {
         break;
       }
       case 'explosion': {
-        // Expanding ring
         const radius = easeOut3(t) * L.cs * 2;
-        ctx.globalAlpha = (1-t)*0.6;
+
+        // Fireball radial gradient fill
+        ctx.globalAlpha = (1-t)*0.55;
+        const fbGrad = ctx.createRadialGradient(a.x, a.y, 0, a.x, a.y, radius);
+        fbGrad.addColorStop(0, 'rgba(255,255,200,0.9)');
+        fbGrad.addColorStop(0.3, 'rgba(255,200,60,0.7)');
+        fbGrad.addColorStop(0.7, 'rgba(255,100,30,0.4)');
+        fbGrad.addColorStop(1, 'rgba(255,60,20,0)');
+        ctx.fillStyle = fbGrad;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, radius, 0, Math.PI*2);
+        ctx.fill();
+
+        // Primary expanding ring
+        ctx.globalAlpha = (1-t)*0.7;
         ctx.strokeStyle = '#FF6B40';
         ctx.lineWidth = 3*(1-t);
         ctx.beginPath();
         ctx.arc(a.x, a.y, radius, 0, Math.PI*2);
         ctx.stroke();
-        // Inner flash
+
+        // Outer shockwave ring
+        const outerR = easeOut3(t) * L.cs * 3;
+        ctx.globalAlpha = (1-t)*0.3;
+        ctx.strokeStyle = 'rgba(255,150,80,0.5)';
+        ctx.lineWidth = 1.5*(1-t);
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, outerR, 0, Math.PI*2);
+        ctx.stroke();
+
+        // Inner bright white core
+        if (t<0.35) {
+          ctx.globalAlpha = (1-t/0.35)*0.8;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(a.x, a.y, L.cs*0.4*(1-t), 0, Math.PI*2);
+          ctx.fill();
+        }
+
+        // Inner flash (gold)
         if (t<0.3) {
           ctx.globalAlpha = (1-t/0.3)*0.5;
           ctx.fillStyle = '#FFD700';
@@ -2547,24 +2673,100 @@ function renderAnims(now) {
           ctx.arc(a.x, a.y, L.cs*(1-t), 0, Math.PI*2);
           ctx.fill();
         }
+
+        // Debris particles (6-8 small rotating rectangles)
+        ctx.globalAlpha = (1-t)*0.7;
+        const debrisCount = 7;
+        for (let di=0; di<debrisCount; di++) {
+          const dAng = (di/debrisCount)*Math.PI*2 + di*1.3;
+          const dDist = easeOut3(t) * L.cs * (1.5 + di*0.3);
+          const dx = a.x + Math.cos(dAng) * dDist;
+          const dy = a.y + Math.sin(dAng) * dDist;
+          const dSize = 3*(1-t);
+          ctx.save();
+          ctx.translate(dx, dy);
+          ctx.rotate(t * (3 + di));
+          ctx.fillStyle = di%2===0 ? '#FF8830' : '#FFB040';
+          ctx.fillRect(-dSize/2, -dSize/2, dSize, dSize);
+          ctx.restore();
+        }
+
         ctx.globalAlpha = 1;
         break;
       }
       case 'beam': {
-        // Horizontal light beam across a row
+        // Lightning bolt across a row
         const row = a.row;
         const by = L.gy + row*L.cs + L.cs/2;
         const beamW = easeOut3(Math.min(t*2,1)) * L.gw;
         const fade = t>0.5?1-(t-0.5)/0.5:1;
-        ctx.globalAlpha = fade * 0.7;
+        const bx0 = L.gx + (L.gw-beamW)/2;
+        const bx1 = bx0 + beamW;
+
+        // Generate zigzag lightning bolt path
+        const segments = 12;
+        const boltPts = [{x:bx0, y:by}];
+        // Use anim start as seed for stable random
+        const seed = a.start || 0;
+        for (let si=1; si<segments; si++) {
+          const px = bx0 + (bx1-bx0)*(si/segments);
+          const jitter = ((Math.sin(seed*0.01+si*7.3)*43758.5453)%1-0.5)*L.cs*0.6;
+          boltPts.push({x:px, y:by+jitter});
+        }
+        boltPts.push({x:bx1, y:by});
+
+        // Electric glow aura
+        ctx.globalAlpha = fade * 0.35;
+        ctx.strokeStyle = '#00FFFF';
+        ctx.lineWidth = 8;
+        ctx.shadowColor = '#00FFFF';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.moveTo(boltPts[0].x, boltPts[0].y);
+        for (let bi=1; bi<boltPts.length; bi++) ctx.lineTo(boltPts[bi].x, boltPts[bi].y);
+        ctx.stroke();
+
+        // Main lightning bolt (bright white-cyan)
+        ctx.globalAlpha = fade * 0.85;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#00FFFF';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(boltPts[0].x, boltPts[0].y);
+        for (let bi=1; bi<boltPts.length; bi++) ctx.lineTo(boltPts[bi].x, boltPts[bi].y);
+        ctx.stroke();
+
+        // Branching mini-bolts (2-3 off the main bolt)
+        ctx.globalAlpha = fade * 0.5;
+        ctx.strokeStyle = '#88FFFF';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 6;
+        for (let br=0; br<3; br++) {
+          const bIdx = 3 + br*3;
+          if (bIdx < boltPts.length) {
+            const bp = boltPts[bIdx];
+            const bDir = (br%2===0)?1:-1;
+            ctx.beginPath();
+            ctx.moveTo(bp.x, bp.y);
+            ctx.lineTo(bp.x + L.cs*0.3, bp.y + bDir*L.cs*0.4);
+            ctx.lineTo(bp.x + L.cs*0.5, bp.y + bDir*L.cs*0.25);
+            ctx.stroke();
+          }
+        }
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+        // Secondary glow layer (original beam)
+        ctx.globalAlpha = fade * 0.5;
         const bg = ctx.createLinearGradient(L.gx, by-L.cs/2, L.gx, by+L.cs/2);
-        bg.addColorStop(0, 'rgba(255,255,100,0)');
-        bg.addColorStop(0.4, 'rgba(255,255,200,0.8)');
-        bg.addColorStop(0.5, 'rgba(255,255,255,1)');
-        bg.addColorStop(0.6, 'rgba(255,255,200,0.8)');
-        bg.addColorStop(1, 'rgba(255,255,100,0)');
+        bg.addColorStop(0, 'rgba(0,255,255,0)');
+        bg.addColorStop(0.4, 'rgba(100,255,255,0.5)');
+        bg.addColorStop(0.5, 'rgba(255,255,255,0.7)');
+        bg.addColorStop(0.6, 'rgba(100,255,255,0.5)');
+        bg.addColorStop(1, 'rgba(0,255,255,0)');
         ctx.fillStyle = bg;
-        ctx.fillRect(L.gx + (L.gw-beamW)/2, by-L.cs*0.4, beamW, L.cs*0.8);
+        ctx.fillRect(bx0, by-L.cs*0.4, beamW, L.cs*0.8);
+
         ctx.globalAlpha = 1;
         break;
       }
@@ -3591,10 +3793,14 @@ function renderLeaderboard(now) {
     ctx.shadowBlur = 0;
   }
   ctx.fillStyle = 'rgba(255,215,0,'+shimmer+')';
-  ctx.font = 'bold 20px '+F; ctx.textAlign = 'center';
+  ctx.font = 'bold 18px '+F; ctx.textAlign = 'center';
   ctx.shadowColor = 'rgba(255,200,60,0.4)'; ctx.shadowBlur = 12;
-  ctx.fillText('\u6392\u884C\u699C', cx+4, hdrH/2);
+  ctx.fillText('Cat Championship', cx+4, hdrH/2 - 7);
   ctx.shadowBlur = 0;
+  // Subtitle
+  ctx.fillStyle = 'rgba(180,200,220,0.7)';
+  ctx.font = '11px '+F;
+  ctx.fillText('Weekly Leaderboard', cx+4, hdrH/2 + 10);
 
   // Right: avatar or login
   if (lineUser) {
