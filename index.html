@@ -1853,6 +1853,40 @@ function renderMenu(now) {
   ctx.font = '13px '+CUTE;
   ctx.fillText('BEST  '+settings.bestScore.toLocaleString(), cx, btn2Y + btnH*0.85 + 26);
 
+  // LINE Login / Profile — bottom area
+  const lineY = btn2Y + btnH*0.85 + 56;
+  if (lineUser) {
+    // Logged in — show avatar + name
+    const acx = cx, acy = lineY;
+    if (lineUser.avatarImg && lineUser.avatarImg.complete) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(acx-50, acy, 16, 0, Math.PI*2); ctx.clip();
+      ctx.drawImage(lineUser.avatarImg, acx-66, acy-16, 32, 32);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#06C755';
+      ctx.beginPath(); ctx.arc(acx-50, acy, 16, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 13px '+CUTE;
+      ctx.textAlign = 'center';
+      ctx.fillText(lineUser.name[0], acx-50, acy);
+    }
+    ctx.fillStyle = '#AACCAA';
+    ctx.font = '14px '+CUTE;
+    ctx.textAlign = 'left';
+    ctx.fillText(lineUser.name, acx-28, acy+5);
+  } else {
+    // Not logged in — LINE login button
+    const lbW=180, lbH=38;
+    const lbX=cx-lbW/2, lbY=lineY-lbH/2;
+    ctx.fillStyle = '#06C755';
+    roundRect(lbX, lbY, lbW, lbH, lbH/2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px '+CUTE;
+    ctx.textAlign = 'center';
+    ctx.fillText('LINE \u767B\u5165', cx, lineY+1);
+    hitAreas.menuLineLogin = {x:lbX, y:lbY, w:lbW, h:lbH};
+  }
+
   ctx.globalAlpha = 1;
   ctx.restore();
 }
@@ -3496,6 +3530,12 @@ function onDown(e) {
         screen = SCR.LEADERBOARD;
         lbLastFetch = 0; // force refresh
         hitAreas.lineLogin = null;
+        return;
+      }
+      // LINE Login button on menu
+      if (!lineUser && hitAreas.menuLineLogin && hitTest(p, hitAreas.menuLineLogin)) {
+        sfx('click');
+        lineLogin();
         return;
       }
       break;
