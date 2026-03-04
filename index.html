@@ -138,15 +138,16 @@ async function initLiff() {
 function lineLogin() {
   try {
     if (typeof liff === 'undefined') return;
+    if (liff.isInClient()) {
+      // LIFF Browser：liff.init() 時已自動登入，不能呼叫 liff.login()
+      // 如果還沒登入，重新 init 一次
+      if (!liff.isLoggedIn()) initLiff();
+      return;
+    }
     if (!liff.isLoggedIn()) {
-      if (liff.isInClient()) {
-        // LINE 內建瀏覽器：不能帶 redirectUri，否則 400 error
-        liff.login();
-      } else {
-        // 外部瀏覽器：需要乾淨的 redirectUri
-        const cleanUrl = window.location.origin + window.location.pathname;
-        liff.login({ redirectUri: cleanUrl });
-      }
+      // 外部瀏覽器：手動觸發 LINE Login OAuth
+      const cleanUrl = window.location.origin + window.location.pathname;
+      liff.login({ redirectUri: cleanUrl });
     }
   } catch(e) { console.warn('LINE login failed:', e); }
 }
