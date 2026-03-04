@@ -326,68 +326,94 @@ function ensureAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (!_masterGain) _initBus();
 
-  // Load BGM into Web Audio buffer via XHR (more compatible than fetch)
+  // Load BGM via XHR → try 3 methods to play it
   if (!_bgmBuffer && !_bgmLoading && audioCtx) {
     _bgmLoading = true;
-    _bgmDebug = 'XHR loading...';
+    _bgmDebug = 'XHR...';
     const xhr = new XMLHttpRequest();
     xhr.open('GET', 'assets/bgm.mp3', true);
     xhr.responseType = 'arraybuffer';
     xhr.onload = function() {
-      if (xhr.status === 200 || xhr.status === 0) {
-        _bgmDebug = 'decoding...';
-        // Use callback API (not Promise) for max mobile compat
-        audioCtx.decodeAudioData(xhr.response,
-          function(decoded) {
-            _bgmBuffer = decoded;
-            _bgmLoading = false;
-            _bgmDebug = 'decoded OK';
-            if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
-                screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
-              bgmPlay();
-            }
-          },
-          function(err) {
-            _bgmDebug = 'decode ERR: ' + (err && err.message || err);
-            _bgmLoading = false;
-            _tryAudioElementBGM();
-          }
-        );
-      } else {
-        _bgmDebug = 'XHR HTTP ' + xhr.status;
+      if (!(xhr.status === 200 || xhr.status === 0)) {
+        _bgmDebug = 'HTTP ' + xhr.status;
         _bgmLoading = false;
-        _tryAudioElementBGM();
+        return;
       }
+      _bgmDebug = 'decode...';
+      // Method A: decodeAudioData (callback API for compat)
+      audioCtx.decodeAudioData(xhr.response,
+        function(decoded) {
+          _bgmBuffer = decoded;
+          _bgmLoading = false;
+          _bgmDebug = 'A:ok';
+          _autoStartBGM();
+        },
+        function() {
+          // Method A failed → try Method B: Blob URL + <audio>
+          _bgmDebug = 'A:fail→B';
+          _bgmLoading = false;
+          _tryBlobBGM(xhr.response);
+        }
+      );
     };
     xhr.onerror = function() {
-      _bgmDebug = 'XHR network err';
+      _bgmDebug = 'XHR err';
       _bgmLoading = false;
-      _tryAudioElementBGM();
     };
     xhr.send();
   }
 }
 
-// Fallback: try <audio> element directly
-function _tryAudioElementBGM() {
-  if (!settings.musicOn) return;
-  if (!(screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
-      screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) return;
+// Blob URL fallback: create blob from arraybuffer, set as <audio> src
+let _bgmBlobReady = false;
+function _tryBlobBGM(arrayBuf) {
   const el = document.getElementById('bgm');
-  if (el) {
-    el.volume = 0.35;
-    const p = el.play();
-    if (p && p.then) {
-      p.then(() => { _bgmPlaying = true; _bgmDebug = 'audio.play() OK'; })
-       .catch(e => { _bgmDebug = 'audio.play() ERR: ' + e.message; });
-    }
+  if (!el) { _bgmDebug = 'B:no el'; return; }
+  try {
+    const blob = new Blob([arrayBuf], {type:'audio/mpeg'});
+    const url = URL.createObjectURL(blob);
+    el.src = url;
+    el.load();
+    el.oncanplaythrough = function() {
+      _bgmBlobReady = true;
+      _bgmDebug = 'B:ready';
+      _autoStartBGM();
+    };
+    el.onerror = function() {
+      _bgmDebug = 'B:err→C';
+      _trySrcBGM();
+    };
+  } catch(e) {
+    _bgmDebug = 'B:ex→C';
+    _trySrcBGM();
+  }
+}
+
+// Last resort: just try <audio>.play() with original src
+function _trySrcBGM() {
+  const el = document.getElementById('bgm');
+  if (!el) return;
+  el.src = 'assets/bgm.mp3';
+  el.load();
+  el.volume = 0.35;
+  const p = el.play();
+  if (p && p.then) {
+    p.then(() => { _bgmPlaying = true; _bgmDebug = 'C:ok'; })
+     .catch(e => { _bgmDebug = 'C:' + e.message.slice(0,20); });
+  }
+}
+
+function _autoStartBGM() {
+  if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
+      screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
+    bgmPlay();
   }
 }
 
 function bgmPlay() {
   if (_bgmPlaying) return;
 
-  // Method 1: Web Audio BufferSource
+  // Method A: Web Audio BufferSource (best)
   if (audioCtx && _bgmBuffer) {
     if (!_bgmGain) {
       _bgmGain = audioCtx.createGain();
@@ -400,18 +426,18 @@ function bgmPlay() {
     _bgmNode.connect(_bgmGain);
     _bgmNode.start(0);
     _bgmPlaying = true;
-    _bgmDebug = 'BufferSrc playing';
+    _bgmDebug = 'A:playing';
     return;
   }
 
-  // Method 2: Direct <audio>.play()
+  // Method B/C: <audio> element (Blob URL or original)
   const el = document.getElementById('bgm');
   if (el) {
     el.volume = 0.35;
     const p = el.play();
     if (p && p.then) {
-      p.then(() => { _bgmPlaying = true; _bgmDebug = 'audio.play() OK'; })
-       .catch(e => { _bgmDebug = 'audio.play() ERR: ' + e.message; });
+      p.then(() => { _bgmPlaying = true; _bgmDebug += '>play'; })
+       .catch(e => { _bgmDebug += '>err:' + e.message.slice(0,15); });
     }
   }
 }
