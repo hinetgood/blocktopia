@@ -3203,190 +3203,224 @@ function getLevelProgressText() {
 }
 
 // ============================================================
-//  RENDERING — LEADERBOARD (Mock UI)
+//  RENDERING — LEADERBOARD (LINE Game Style)
 // ============================================================
+function _drawAvatar(img, x, y, r, fallbackColor, fallbackChar) {
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.clip();
+    ctx.drawImage(img, x-r, y-r, r*2, r*2);
+    ctx.restore();
+    // Thin ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.stroke();
+  } else {
+    const g = ctx.createRadialGradient(x-r*0.3, y-r*0.3, 0, x, y, r);
+    g.addColorStop(0, fallbackColor);
+    g.addColorStop(1, fallbackColor.replace(')', ',0.7)').replace('rgb','rgba'));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold '+Math.round(r)+'px "Nunito",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(fallbackChar || '?', x, y+1);
+  }
+}
+
 function renderLeaderboard(now) {
   const L = layout;
-  const CUTE = '"Nunito","Comic Neue","Segoe UI",sans-serif';
+  const F = '"Nunito","Comic Neue","Segoe UI",sans-serif';
   const cx = L.w/2;
+  const pad = 16;
+  const cardW = Math.min(L.w - pad*2, 400);
+  const cardX = cx - cardW/2;
 
   drawBackground();
-
-  // Auto-fetch leaderboard data
   fetchLeaderboard();
 
-  // Title
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffd34e';
-  ctx.font = 'bold 28px '+CUTE;
-  ctx.shadowColor = 'rgba(255,200,60,0.3)'; ctx.shadowBlur = 15;
-  ctx.fillText('\uD83C\uDFC6 \u6392\u884C\u699C', cx, 44);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#8899AA';
-  ctx.font = '13px '+CUTE;
-  ctx.fillText('Leaderboard', cx, 68);
+  // ── Header Bar (frosted glass) ──
+  const hdrH = 56;
+  ctx.fillStyle = 'rgba(18,24,42,0.85)';
+  ctx.fillRect(0, 0, L.w, hdrH);
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(0, hdrH-1, L.w, 1);
 
   // Back button
-  const bbw=44, bbh=36;
+  const bbS = 36;
+  const bbX = pad, bbY = (hdrH-bbS)/2;
   ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  roundRect(16, 44-bbh/2, bbw, bbh, 10); ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = '20px '+CUTE;
-  ctx.textAlign = 'center';
-  ctx.fillText('\u2190', 16+bbw/2, 44);
-  hitAreas.lbBack = {x:16, y:44-bbh/2, w:bbw, h:bbh};
+  roundRect(bbX, bbY, bbS, bbS, 12); ctx.fill();
+  ctx.fillStyle = '#AAB8CC';
+  ctx.font = '18px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('\u276E', bbX+bbS/2, hdrH/2);
+  hitAreas.lbBack = {x:bbX, y:bbY, w:bbS, h:bbS};
 
-  // LINE Login status + button (top right area)
+  // Title
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 20px '+F;
+  ctx.textAlign = 'center';
+  ctx.fillText('\u6392\u884C\u699C', cx, hdrH/2);
+
+  // Right: avatar or login
   if (lineUser) {
-    // Logged in — show avatar + name
-    const ax = L.w - 24, ay = 44;
-    if (lineUser.avatarImg && lineUser.avatarImg.complete) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(ax-14, ay, 14, 0, Math.PI*2);
-      ctx.clip();
-      ctx.drawImage(lineUser.avatarImg, ax-28, ay-14, 28, 28);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#4CAF50';
-      ctx.beginPath(); ctx.arc(ax-14, ay, 14, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 12px '+CUTE;
-      ctx.textAlign = 'center';
-      ctx.fillText(lineUser.name[0], ax-14, ay);
-    }
+    _drawAvatar(lineUser.avatarImg, L.w-pad-16, hdrH/2, 16, '#06C755', lineUser.name?lineUser.name[0]:'');
   } else {
-    // Not logged in — show LINE login button
-    const inIframe = window.self !== window.top;
-    const lbtnW=110, lbtnH=30;
-    const lbtnX=L.w-lbtnW-12, lbtnY=44-lbtnH/2;
+    const lbW=80, lbH=30, lbX=L.w-pad-lbW, lbY=(hdrH-lbH)/2;
     ctx.fillStyle = '#06C755';
-    roundRect(lbtnX, lbtnY, lbtnW, lbtnH, lbtnH/2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px '+CUTE;
-    ctx.textAlign = 'center';
-    ctx.fillText('LINE \u767B\u5165', lbtnX+lbtnW/2, lbtnY+lbtnH/2);
-    hitAreas.lineLogin = {x:lbtnX, y:lbtnY, w:lbtnW, h:lbtnH};
-    // Hint: in iframe, login opens new tab
-    if (inIframe) {
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '9px '+CUTE;
-      ctx.fillText('\u2197 \u65B0\u8996\u7A97\u958B\u555F', lbtnX+lbtnW/2, lbtnY+lbtnH+10);
-    }
+    roundRect(lbX, lbY, lbW, lbH, lbH/2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px '+F; ctx.textAlign = 'center';
+    ctx.fillText('LINE \u767B\u5165', lbX+lbW/2, lbY+lbH/2);
+    hitAreas.lineLogin = {x:lbX, y:lbY, w:lbW, h:lbH};
   }
 
-  // Leaderboard entries
-  const startY = 95;
-  const rowH = 44;
-  const lbw = Math.min(L.w-32, 360);
-  const lbx = cx - lbw/2;
+  let curY = hdrH + 16;
+
+  // ── My Score Card ──
+  const myCardH = 80;
+  // Card background gradient
+  const mcg = ctx.createLinearGradient(cardX, curY, cardX+cardW, curY+myCardH);
+  mcg.addColorStop(0, 'rgba(55,80,170,0.25)');
+  mcg.addColorStop(1, 'rgba(100,60,200,0.15)');
+  ctx.fillStyle = mcg;
+  roundRect(cardX, curY, cardW, myCardH, 16); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,140,255,0.2)';
+  ctx.lineWidth = 1;
+  roundRect(cardX, curY, cardW, myCardH, 16); ctx.stroke();
 
   const entries = leaderboardData.length > 0 ? leaderboardData : [];
-
-  if (entries.length === 0 && !lbLoading) {
-    // Empty state
-    ctx.fillStyle = '#556677';
-    ctx.font = '15px '+CUTE;
-    ctx.textAlign = 'center';
-    ctx.fillText(lineUser ? '\u9084\u6C92\u6709\u6392\u884C\u8CC7\u6599' : '\u767B\u5165 LINE \u5F8C\u53EF\u4E0A\u50B3\u5206\u6578', cx, startY+60);
-    ctx.fillText(lineUser ? '\u73A9\u904E\u904A\u6232\u5F8C\u5206\u6578\u6703\u81EA\u52D5\u4E0A\u50B3' : '', cx, startY+82);
-  }
-
-  if (lbLoading && entries.length === 0) {
-    ctx.fillStyle = '#8899AA';
-    ctx.font = '14px '+CUTE;
-    ctx.textAlign = 'center';
-    ctx.fillText('\u8F09\u5165\u4E2D...', cx, startY+60);
-  }
-
-  // Find current user's rank
   let myRank = -1;
+  if (lineUser) myRank = entries.findIndex(e => e.uid === lineUser.uid);
+
   if (lineUser) {
-    myRank = entries.findIndex(e => e.uid === lineUser.uid);
+    // Avatar
+    _drawAvatar(lineUser.avatarImg, cardX+44, curY+myCardH/2, 24, '#06C755', lineUser.name[0]);
+    // Name + rank
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 16px '+F;
+    ctx.fillText(lineUser.name, cardX+78, curY+myCardH/2-12);
+    ctx.fillStyle = '#8899BB';
+    ctx.font = '12px '+F;
+    ctx.fillText(myRank >= 0 ? '\u6392\u540D #'+(myRank+1) : '\u5C1A\u672A\u4E0A\u699C', cardX+78, curY+myCardH/2+10);
+    // Score (right side, big)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#FFD34E';
+    ctx.font = 'bold 26px '+F;
+    ctx.shadowColor = 'rgba(255,200,60,0.3)'; ctx.shadowBlur = 10;
+    ctx.fillText(settings.bestScore.toLocaleString(), cardX+cardW-20, curY+myCardH/2-6);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#8899BB';
+    ctx.font = '11px '+F;
+    ctx.fillText('BEST SCORE', cardX+cardW-20, curY+myCardH/2+14);
+  } else {
+    // Not logged in card
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8899BB';
+    ctx.font = '14px '+F;
+    ctx.fillText('\u767B\u5165 LINE \u4F86\u8A18\u9304\u4F60\u7684\u5206\u6578', cx, curY+myCardH/2-10);
+    ctx.fillStyle = '#556677';
+    ctx.font = '12px '+F;
+    ctx.fillText('\u6700\u9AD8\u5206 '+settings.bestScore.toLocaleString(), cx, curY+myCardH/2+12);
   }
 
+  curY += myCardH + 16;
+
+  // ── Section Divider ──
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(cardX+20, curY, cardW-40, 1);
+  curY += 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#556677';
+  ctx.font = '11px '+F;
+  ctx.fillText('TOP PLAYERS', cx, curY+10);
+  curY += 26;
+
+  // ── Leaderboard Rows ──
+  const rowH = 56;
   const maxShow = Math.min(entries.length, 10);
+  const rankColors = ['#FFD700','#C0C0C0','#CD7F32'];
+  const rankBg = ['rgba(255,215,0,0.08)','rgba(192,192,192,0.06)','rgba(205,127,50,0.05)'];
+
+  if (maxShow === 0 && !lbLoading) {
+    // Empty state — trophy icon + message
+    const emY = curY + 40;
+    ctx.font = '48px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.3;
+    ctx.fillText('\uD83C\uDFC6', cx, emY);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#667788';
+    ctx.font = '15px '+F;
+    ctx.fillText('\u9084\u6C92\u6709\u4EBA\u4E0A\u699C', cx, emY+46);
+    ctx.fillStyle = '#556677';
+    ctx.font = '12px '+F;
+    ctx.fillText('\u73A9\u904E\u904A\u6232\u5F8C\u5206\u6578\u6703\u81EA\u52D5\u4E0A\u50B3', cx, emY+68);
+  }
+
+  if (lbLoading && maxShow === 0) {
+    ctx.fillStyle = '#8899AA';
+    ctx.font = '14px '+F; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const dots = '.'.repeat(1 + Math.floor(now/500)%3);
+    ctx.fillText('\u8F09\u5165\u4E2D'+dots, cx, curY+50);
+  }
+
   for (let i = 0; i < maxShow; i++) {
     const entry = entries[i];
-    const ey = startY + i*rowH;
+    const ey = curY + i*rowH;
     const isTop3 = i < 3;
     const isMe = lineUser && entry.uid === lineUser.uid;
+    const rowCy = ey + rowH/2;
 
     // Row background
-    ctx.fillStyle = isMe ? 'rgba(85,119,255,0.12)' : isTop3 ? 'rgba(255,200,60,0.06)' : 'rgba(255,255,255,0.03)';
-    roundRect(lbx, ey, lbw, rowH-4, 8); ctx.fill();
     if (isMe) {
-      ctx.strokeStyle = 'rgba(85,119,255,0.4)';
-      ctx.lineWidth = 1;
-      roundRect(lbx, ey, lbw, rowH-4, 8); ctx.stroke();
-    }
-
-    // Rank
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const rankEmoji = i===0?'\uD83E\uDD47':i===1?'\uD83E\uDD48':i===2?'\uD83E\uDD49':'';
-    ctx.font = 'bold 16px '+CUTE;
-    ctx.fillStyle = isTop3 ? '#ffd34e' : '#667788';
-    ctx.fillText(rankEmoji || String(i+1), lbx+22, ey+rowH/2-2);
-
-    // Avatar — LINE profile picture or fallback
-    const acx = lbx+56, acy = ey+rowH/2-2;
-    if (entry.avatarImg && entry.avatarImg.complete && entry.avatarImg.naturalWidth > 0) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(acx, acy, 14, 0, Math.PI*2);
-      ctx.clip();
-      ctx.drawImage(entry.avatarImg, acx-14, acy-14, 28, 28);
-      ctx.restore();
+      ctx.fillStyle = 'rgba(85,119,255,0.12)';
+      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.fill();
+      ctx.strokeStyle = 'rgba(100,140,255,0.35)';
+      ctx.lineWidth = 1.5;
+      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.stroke();
+    } else if (isTop3) {
+      ctx.fillStyle = rankBg[i];
+      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.fill();
     } else {
-      ctx.fillStyle = COLORS[i%COLORS.length].base;
-      ctx.beginPath(); ctx.arc(acx, acy, 14, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px '+CUTE;
-      ctx.textAlign = 'center';
-      ctx.fillText(entry.name ? entry.name[0] : '?', acx, acy);
+      ctx.fillStyle = 'rgba(255,255,255,0.02)';
+      roundRect(cardX, ey, cardW, rowH-4, 12); ctx.fill();
     }
+
+    // Rank badge
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (isTop3) {
+      // Medal circle
+      const mg = ctx.createRadialGradient(cardX+26, rowCy-2, 0, cardX+26, rowCy-2, 14);
+      mg.addColorStop(0, rankColors[i]);
+      mg.addColorStop(1, rankColors[i]+'80');
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(cardX+26, rowCy-2, 14, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = i===0?'#8B6914':i===1?'#555':'#5C3317';
+      ctx.font = 'bold 14px '+F;
+      ctx.fillText(String(i+1), cardX+26, rowCy-1);
+    } else {
+      ctx.fillStyle = '#556677';
+      ctx.font = 'bold 14px '+F;
+      ctx.fillText(String(i+1), cardX+26, rowCy-2);
+    }
+
+    // Avatar
+    const avX = cardX+60, avR = 18;
+    const fc = COLORS[i%COLORS.length].base;
+    _drawAvatar(entry.avatarImg, avX, rowCy-2, avR, fc, entry.name?entry.name[0]:'?');
 
     // Name
-    ctx.textAlign = 'left';
-    ctx.fillStyle = isMe ? '#AACCFF' : '#DDEEFF';
-    ctx.font = (isMe?'bold ':'600 ')+'14px '+CUTE;
-    const dispName = entry.name || 'Player';
-    ctx.fillText(dispName.length>10?dispName.slice(0,10)+'..':dispName, lbx+78, acy);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = isMe ? '#BBDDFF' : '#DDEEFF';
+    ctx.font = (isMe?'bold ':'600 ')+'15px '+F;
+    const dn = entry.name || 'Player';
+    ctx.fillText(dn.length>8?dn.slice(0,8)+'..':dn, cardX+86, rowCy-2);
 
-    // Score
+    // Score (right aligned)
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#FFE680';
-    ctx.font = 'bold 14px '+CUTE;
-    ctx.fillText(entry.score.toLocaleString(), lbx+lbw-12, acy);
-  }
-
-  // Your score at bottom (always show)
-  const myY = startY + maxShow*rowH + 12;
-  ctx.fillStyle = 'rgba(85,119,255,0.1)';
-  roundRect(lbx, myY, lbw, rowH, 8); ctx.fill();
-  ctx.strokeStyle = 'rgba(85,119,255,0.3)';
-  ctx.lineWidth = 1;
-  roundRect(lbx, myY, lbw, rowH, 8); ctx.stroke();
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#5577FF';
-  ctx.font = 'bold 14px '+CUTE;
-  if (lineUser) {
-    const rankStr = myRank >= 0 ? '#'+(myRank+1)+' ' : '';
-    ctx.fillText(rankStr + lineUser.name + '  ' + settings.bestScore.toLocaleString(), cx, myY+rowH/2);
-  } else {
-    ctx.fillText('\u4F60  '+settings.bestScore.toLocaleString(), cx, myY+rowH/2);
-  }
-
-  // Status text
-  const noteY = myY + rowH + 18;
-  ctx.fillStyle = '#556677';
-  ctx.font = '11px '+CUTE;
-  ctx.textAlign = 'center';
-  if (!lineUser) {
-    ctx.fillText('\u2139\uFE0F LINE \u767B\u5165\u5F8C\u5206\u6578\u81EA\u52D5\u4E0A\u50B3\u6392\u884C\u699C', cx, noteY);
-  } else if (lbLoading) {
-    ctx.fillText('\u2615 \u66F4\u65B0\u4E2D...', cx, noteY);
-  } else {
-    ctx.fillText('\u2705 \u5DF2\u767B\u5165\u70BA ' + lineUser.name, cx, noteY);
+    ctx.fillStyle = isTop3 ? '#FFE680' : '#AABBCC';
+    ctx.font = 'bold 16px '+F;
+    ctx.fillText(entry.score.toLocaleString(), cardX+cardW-16, rowCy-2);
   }
 }
 
