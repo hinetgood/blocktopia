@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-<audio id="bgm" loop preload="auto" playsinline src="assets/Sunny Little Puzzle Loop.mp3"></audio>
+<audio id="bgm" loop preload="auto" playsinline crossorigin="anonymous" src="assets/Sunny%20Little%20Puzzle%20Loop.mp3"></audio>
 <canvas id="c"></canvas>
 <!-- LINE LIFF SDK -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -311,12 +311,14 @@ PIECES.forEach(p => {
 let audioCtx = null;
 let _rvbNode = null, _rvbGain = null, _compNode = null, _masterGain = null;
 
-// BGM via Web Audio API (bypasses <audio> element mobile restrictions)
+// BGM via Web Audio API (dual: BufferSource primary, MediaElement fallback)
 let _bgmBuffer = null;   // decoded AudioBuffer
 let _bgmNode = null;     // current BufferSourceNode
 let _bgmGain = null;     // gain node for volume
 let _bgmPlaying = false;
 let _bgmLoading = false;
+let _bgmMediaSrc = null; // MediaElementSourceNode (fallback)
+let _bgmFetchFailed = false;
 
 function ensureAudio() {
   if (!audioCtx) {
@@ -326,43 +328,75 @@ function ensureAudio() {
   if (!_masterGain) _initBus();
 
   // Load BGM into Web Audio buffer on first gesture
-  if (!_bgmBuffer && !_bgmLoading && audioCtx) {
+  if (!_bgmBuffer && !_bgmLoading && !_bgmFetchFailed && audioCtx) {
     _bgmLoading = true;
-    fetch('assets/Sunny Little Puzzle Loop.mp3')
-      .then(r => r.arrayBuffer())
+    fetch('assets/Sunny%20Little%20Puzzle%20Loop.mp3')
+      .then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.arrayBuffer(); })
       .then(buf => audioCtx.decodeAudioData(buf))
       .then(decoded => {
         _bgmBuffer = decoded;
+        _bgmLoading = false;
         // Auto-start if music should be on
         if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
             screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
           bgmPlay();
         }
       })
-      .catch(() => { _bgmLoading = false; });
+      .catch(e => {
+        console.warn('BGM fetch/decode failed, using <audio> fallback:', e);
+        _bgmLoading = false;
+        _bgmFetchFailed = true;
+        // Try auto-start via fallback
+        if (settings.musicOn && (screen === SCR.PLAYING || screen === SCR.LEVEL_SELECT ||
+            screen === SCR.LEVEL_BRIEF || screen === SCR.PAUSED || screen === SCR.LEVEL_CLEAR)) {
+          bgmPlay();
+        }
+      });
   }
 }
 
 function bgmPlay() {
-  if (!audioCtx || !_bgmBuffer || _bgmPlaying) return;
+  if (!audioCtx || _bgmPlaying) return;
+
+  // Ensure gain node
   if (!_bgmGain) {
     _bgmGain = audioCtx.createGain();
     _bgmGain.connect(audioCtx.destination);
   }
   _bgmGain.gain.value = 0.35;
-  _bgmNode = audioCtx.createBufferSource();
-  _bgmNode.buffer = _bgmBuffer;
-  _bgmNode.loop = true;
-  _bgmNode.connect(_bgmGain);
-  _bgmNode.start(0);
-  _bgmPlaying = true;
+
+  // Method 1: Web Audio BufferSource (best quality)
+  if (_bgmBuffer) {
+    _bgmNode = audioCtx.createBufferSource();
+    _bgmNode.buffer = _bgmBuffer;
+    _bgmNode.loop = true;
+    _bgmNode.connect(_bgmGain);
+    _bgmNode.start(0);
+    _bgmPlaying = true;
+    return;
+  }
+
+  // Method 2: <audio> element routed through Web Audio API (fallback)
+  const el = document.getElementById('bgm');
+  if (el) {
+    if (!_bgmMediaSrc) {
+      try { _bgmMediaSrc = audioCtx.createMediaElementSource(el); } catch(e) { /* already connected */ }
+      if (_bgmMediaSrc) _bgmMediaSrc.connect(_bgmGain);
+    }
+    el.currentTime = 0;
+    el.play().then(() => { _bgmPlaying = true; }).catch(() => {});
+  }
 }
 
 function bgmStop() {
-  if (_bgmNode && _bgmPlaying) {
+  // Stop BufferSource if active
+  if (_bgmNode) {
     try { _bgmNode.stop(); } catch(e) {}
     _bgmNode = null;
   }
+  // Pause <audio> element if used as fallback
+  const el = document.getElementById('bgm');
+  if (el && !el.paused) el.pause();
   _bgmPlaying = false;
 }
 
