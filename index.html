@@ -139,9 +139,14 @@ function lineLogin() {
   try {
     if (typeof liff === 'undefined') return;
     if (!liff.isLoggedIn()) {
-      // Use clean URL without query params / hash — prevents LINE 400 error
-      const cleanUrl = window.location.origin + window.location.pathname;
-      liff.login({ redirectUri: cleanUrl });
+      if (liff.isInClient()) {
+        // LINE 內建瀏覽器：不能帶 redirectUri，否則 400 error
+        liff.login();
+      } else {
+        // 外部瀏覽器：需要乾淨的 redirectUri
+        const cleanUrl = window.location.origin + window.location.pathname;
+        liff.login({ redirectUri: cleanUrl });
+      }
     }
   } catch(e) { console.warn('LINE login failed:', e); }
 }
