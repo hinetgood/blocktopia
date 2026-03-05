@@ -2260,8 +2260,8 @@ function drawHeader(now) {
   recoverHearts();
   const heartSize = 13, heartGap = 3;
   const totalHW = HEARTS_MAX * (heartSize + heartGap) - heartGap;
-  const heartStartX = L.gx + L.gw - totalHW;
-  const heartY = 10;
+  const heartStartX = L.gx + (L.gw - totalHW) / 2;
+  const heartY = 6;
   for (let i = 0; i < HEARTS_MAX; i++) {
     const hx = heartStartX + i * (heartSize + heartGap) + heartSize/2;
     const hy = heartY + heartSize/2;
@@ -2287,10 +2287,10 @@ function drawHeader(now) {
   }
   if (hearts.current < HEARTS_MAX) {
     const nextMs = getNextHeartTime();
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'center';
     ctx.font = '600 9px "Segoe UI",-apple-system,system-ui,sans-serif';
     ctx.fillStyle = '#FF8899';
-    ctx.fillText('+1 ' + formatTime(nextMs), L.gx + L.gw, heartY + heartSize + 10);
+    ctx.fillText('+1 ' + formatTime(nextMs), L.gx + L.gw/2, heartY + heartSize + 10);
   }
 
   // Streak badge (center of header)
