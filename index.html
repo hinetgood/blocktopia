@@ -762,9 +762,33 @@ const bgm    = document.getElementById('bgm');
 const settings = { musicOn:true, sfxOn:true, tutorialSeen:false, bestScore:0, noAdsUnlocked:false };
 const NO_ADS_PRICE_TWD = 120;
 const NO_ADS_PRICE_LABEL = `NT$${NO_ADS_PRICE_TWD}`;
+const NO_ADS_PRODUCT_ID = 'blocktopia.no_ads_lifetime';
 
 function hasNoAds() {
   return !!settings.noAdsUnlocked;
+}
+
+function setNoAdsUnlocked(unlocked) {
+  settings.noAdsUnlocked = !!unlocked;
+  if (settings.noAdsUnlocked) {
+    _adReady = false;
+    _interstitialReady = false;
+  }
+  saveSettings();
+}
+
+async function syncNoAdsStatusFromNative() {
+  try {
+    if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.BlocktopiaIAP?.getNoAdsStatus) return;
+    const result = await Capacitor.Plugins.BlocktopiaIAP.getNoAdsStatus({
+      productId: NO_ADS_PRODUCT_ID
+    });
+    if (result && typeof result.noAdsUnlocked === 'boolean') {
+      setNoAdsUnlocked(result.noAdsUnlocked);
+    }
+  } catch (e) {
+    console.warn('No-ads status sync failed:', e);
+  }
 }
 
 async function purchaseNoAdsLifetime() {
@@ -774,12 +798,11 @@ async function purchaseNoAdsLifetime() {
   try {
     if (typeof Capacitor !== 'undefined' && Capacitor.Plugins?.BlocktopiaIAP?.purchaseNoAdsLifetime) {
       const result = await Capacitor.Plugins.BlocktopiaIAP.purchaseNoAdsLifetime({
-        productId: 'blocktopia.no_ads_lifetime',
+        productId: NO_ADS_PRODUCT_ID,
         priceTwd: NO_ADS_PRICE_TWD
       });
       if (result && result.purchased) {
-        settings.noAdsUnlocked = true;
-        saveSettings();
+        setNoAdsUnlocked(true);
         return true;
       }
       return false;
@@ -4752,6 +4775,7 @@ function loop(now) {
 //  INIT
 // ============================================================
 loadSettings();
+syncNoAdsStatusFromNative();
 loadLevelProgress();
 loadHearts();
 resizeCanvas();
