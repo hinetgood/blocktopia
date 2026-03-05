@@ -15,10 +15,10 @@ jobs:
       BUNDLE_ID: com.blocktopia.app
       XCODE_WORKSPACE: ios/App/App.xcworkspace
       XCODE_SCHEME: App
-      ARCHIVE_PATH: ${{ runner.temp }}/App.xcarchive
-      EXPORT_PATH: ${{ runner.temp }}/export
-      EXPORT_OPTIONS_PATH: ${{ runner.temp }}/ExportOptions.plist
-      API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+      ARCHIVE_PATH: /tmp/App.xcarchive
+      EXPORT_PATH: /tmp/export
+      EXPORT_OPTIONS_PATH: /tmp/ExportOptions.plist
+      API_KEY_PATH: /tmp/AuthKey.p8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
