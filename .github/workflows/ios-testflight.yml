@@ -81,9 +81,6 @@ jobs:
             -authenticationKeyPath "$API_KEY_PATH" \
             -authenticationKeyID "${{ secrets.APPSTORE_KEY_ID }}" \
             -authenticationKeyIssuerID "${{ secrets.APPSTORE_ISSUER_ID }}" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
             clean archive
 
       - name: Export IPA
