@@ -64,6 +64,7 @@ const INTERSTITIAL_EVERY = 3; // show interstitial every N game overs
 async function initAdMob() {
   // Only works inside Capacitor native app
   if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return;
+  if (hasNoAds()) return;
   const { AdMob } = Capacitor.Plugins;
   try {
     await AdMob.initialize({ initializeForTesting: AD_TEST_MODE });
@@ -73,6 +74,7 @@ async function initAdMob() {
 }
 
 async function _prepareRewardedAd() {
+  if (hasNoAds()) return;
   if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return;
   const { AdMob } = Capacitor.Plugins;
   const platform = Capacitor.getPlatform();
@@ -84,6 +86,7 @@ async function _prepareRewardedAd() {
 }
 
 async function showRewardedAd() {
+  if (hasNoAds()) return false;
   if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return false;
   const { AdMob } = Capacitor.Plugins;
   try {
@@ -99,6 +102,7 @@ async function showRewardedAd() {
 }
 
 async function _prepareInterstitial() {
+  if (hasNoAds()) return;
   if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return;
   const { AdMob } = Capacitor.Plugins;
   const platform = Capacitor.getPlatform();
@@ -110,6 +114,7 @@ async function _prepareInterstitial() {
 }
 
 async function tryShowInterstitial() {
+  if (hasNoAds()) return;
   _gameOverCount++;
   if (_gameOverCount % INTERSTITIAL_EVERY !== 0) return;
   if (!_interstitialReady) return;
@@ -754,17 +759,61 @@ const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 const bgm    = document.getElementById('bgm');
 
-const settings = { musicOn:true, sfxOn:true, tutorialSeen:false, bestScore:0 };
+const settings = { musicOn:true, sfxOn:true, tutorialSeen:false, bestScore:0, noAdsUnlocked:false };
+const NO_ADS_PRICE_TWD = 120;
+const NO_ADS_PRICE_LABEL = `NT$${NO_ADS_PRICE_TWD}`;
+
+function hasNoAds() {
+  return !!settings.noAdsUnlocked;
+}
+
+async function purchaseNoAdsLifetime() {
+  if (hasNoAds()) return true;
+
+  // Native purchase hook (to be implemented in a Capacitor plugin).
+  try {
+    if (typeof Capacitor !== 'undefined' && Capacitor.Plugins?.BlocktopiaIAP?.purchaseNoAdsLifetime) {
+      const result = await Capacitor.Plugins.BlocktopiaIAP.purchaseNoAdsLifetime({
+        productId: 'blocktopia.no_ads_lifetime',
+        priceTwd: NO_ADS_PRICE_TWD
+      });
+      if (result && result.purchased) {
+        settings.noAdsUnlocked = true;
+        saveSettings();
+        return true;
+      }
+      return false;
+    }
+  } catch (e) {
+    console.warn('No-ads purchase failed:', e);
+    return false;
+  }
+
+  alert(`內購尚未啟用，請先完成 App Store 內購串接後再開放「${NO_ADS_PRICE_LABEL} 無廣告買斷」。`);
+  return false;
+}
 
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('blocktopia_s'));
-    if (s) { settings.musicOn=!!s.m; settings.sfxOn=s.x!==false; settings.tutorialSeen=!!s.t; }
+    if (s) {
+      settings.musicOn = !!s.m;
+      settings.sfxOn = s.x !== false;
+      settings.tutorialSeen = !!s.t;
+      settings.noAdsUnlocked = !!s.n;
+    }
   } catch {}
   settings.bestScore = loadBest();
 }
 function saveSettings() {
-  try { localStorage.setItem('blocktopia_s',JSON.stringify({m:settings.musicOn,x:settings.sfxOn,t:settings.tutorialSeen})); } catch {}
+  try {
+    localStorage.setItem('blocktopia_s', JSON.stringify({
+      m: settings.musicOn,
+      x: settings.sfxOn,
+      t: settings.tutorialSeen,
+      n: settings.noAdsUnlocked
+    }));
+  } catch {}
 }
 function loadBest()  { try{return parseInt(localStorage.getItem('bp_best'))||0}catch{return 0} }
 function saveBest(s) { try{localStorage.setItem('bp_best',String(s))}catch{} settings.bestScore=s; }
@@ -2150,6 +2199,7 @@ function renderMenu(now) {
 
   // Timer countdown below hearts
   let heartsExtraH = 0;
+  let noHeartActionsH = 0;
   if (hearts.current < HEARTS_MAX) {
     const nextMs = getNextHeartTime();
     ctx.font = 'bold 13px '+CUTE;
@@ -2163,23 +2213,44 @@ function renderMenu(now) {
   if (hearts.current <= 0) {
     const adBW = 200, adBH = 40;
     const adBX = cx-adBW/2, adBY = hPillY + hPillH + 24;
-    const adGrad = ctx.createLinearGradient(adBX, adBY, adBX+adBW, adBY+adBH);
-    adGrad.addColorStop(0, '#FF5577'); adGrad.addColorStop(1, '#FF3355');
-    ctx.fillStyle = adGrad;
-    roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
-    ctx.shadowColor = 'rgba(255,50,80,0.4)'; ctx.shadowBlur = 12;
-    roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 15px '+CUTE;
-    ctx.fillText('\uD83C\uDFAC \u770B\u5EE3\u544A\u7372\u5F97 \u2764\uFE0F', cx, adBY + adBH/2);
-    hitAreas.watchAdHeart = {x:adBX, y:adBY, w:adBW, h:adBH};
+    if (!hasNoAds()) {
+      const adGrad = ctx.createLinearGradient(adBX, adBY, adBX+adBW, adBY+adBH);
+      adGrad.addColorStop(0, '#FF5577'); adGrad.addColorStop(1, '#FF3355');
+      ctx.fillStyle = adGrad;
+      roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
+      ctx.shadowColor = 'rgba(255,50,80,0.4)'; ctx.shadowBlur = 12;
+      roundRect(adBX, adBY, adBW, adBH, adBH/2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 15px '+CUTE;
+      ctx.fillText('\uD83C\uDFAC \u770B\u5EE3\u544A\u7372\u5F97 \u2764\uFE0F', cx, adBY + adBH/2);
+      hitAreas.watchAdHeart = {x:adBX, y:adBY, w:adBW, h:adBH};
+
+      const noAdsY = adBY + adBH + 10;
+      const noAdsGrad = ctx.createLinearGradient(adBX, noAdsY, adBX+adBW, noAdsY+adBH);
+      noAdsGrad.addColorStop(0, '#14B8A6'); noAdsGrad.addColorStop(1, '#0EA5E9');
+      ctx.fillStyle = noAdsGrad;
+      roundRect(adBX, noAdsY, adBW, adBH, adBH/2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px '+CUTE;
+      ctx.fillText(`\uD83D\uDC8E \u8CB7\u65B7\u7121\u5EE3\u544A ${NO_ADS_PRICE_LABEL}`, cx, noAdsY + adBH/2);
+      hitAreas.buyNoAds = {x:adBX, y:noAdsY, w:adBW, h:adBH};
+      noHeartActionsH = adBH*2 + 14;
+    } else {
+      ctx.fillStyle = '#4FC3A1';
+      ctx.font = 'bold 13px '+CUTE;
+      ctx.fillText('\u2705 \u5DF2\u555F\u7528\u7121\u5EE3\u544A', cx, adBY + adBH/2);
+      hitAreas.watchAdHeart = null;
+      hitAreas.buyNoAds = null;
+      noHeartActionsH = 20;
+    }
   } else {
     hitAreas.watchAdHeart = null;
+    hitAreas.buyNoAds = null;
   }
 
   // Leaderboard button
-  const btn2Y = btn1Y + btnH + 14 + heartsExtraH;
+  const btn2Y = btn1Y + btnH + 14 + heartsExtraH + noHeartActionsH;
   ctx.fillStyle = 'rgba(255,200,60,0.08)';
   roundRect(btnX, btn2Y, btnW, btnH*0.85, btnH/2); ctx.fill();
   ctx.fillStyle = '#ffd34e';
@@ -3099,6 +3170,7 @@ function renderGameOverOverlay(now) {
   const L = layout;
   const CUTE = '"Nunito","Comic Neue","Segoe UI",sans-serif';
   const t = Math.min((now-state.goAnimStart)/800, 1);
+  recoverHearts();
 
   // Row-by-row gray-out
   const rowsDone = Math.floor(easeOut3(t)*GRID);
@@ -3121,7 +3193,8 @@ function renderGameOverOverlay(now) {
   const elapsed = now - state.goAnimStart - 800;
 
   // Panel card
-  const pw=300, ph=460, px=cx-pw/2, py=(L.h-ph)/2-10;
+  const outOfHearts = hearts.current <= 0;
+  const pw=300, ph=outOfHearts ? 560 : 460, px=cx-pw/2, py=(L.h-ph)/2-10;
   ctx.fillStyle = 'rgba(22,30,53,0.95)';
   roundRect(px,py,pw,ph,20); ctx.fill();
   ctx.strokeStyle = 'rgba(100,150,255,0.12)';
@@ -3239,7 +3312,7 @@ function renderGameOverOverlay(now) {
   ctx.fillText('\uD83C\uDFC6 \u6700\u9AD8 '+state.best.toLocaleString(), cx, cy);
 
   // Rewarded ad button — only in level mode, only once per round, only if ad is ready
-  if (gameMode === 'level' && !_adUsedThisRound && _adReady) {
+  if (gameMode === 'level' && !_adUsedThisRound && _adReady && !hasNoAds()) {
     cy += 30;
     const aw=210, ah=44;
     const ax=cx-aw/2;
@@ -3258,6 +3331,51 @@ function renderGameOverOverlay(now) {
     cy += ah + 8;
   } else {
     hitAreas.rewardAd = null;
+  }
+
+  if (outOfHearts) {
+    cy += 30;
+    ctx.fillStyle = '#FF6B8A';
+    ctx.font = 'bold 14px '+CUTE;
+    ctx.fillText('\u2764\uFE0F \u9AD4\u529B\u5DF2\u8017\u76E1', cx, cy);
+    cy += 18;
+    ctx.fillStyle = '#FF9DB0';
+    ctx.font = '600 12px '+CUTE;
+    ctx.fillText('\u4E0B\u4E00\u9846\u611B\u5FC3\uFF1A' + formatTime(getNextHeartTime()), cx, cy);
+
+    if (!hasNoAds()) {
+      const ah = 40, aw = 210, ax = cx-aw/2;
+      cy += 14;
+      const adGrad = ctx.createLinearGradient(ax, cy, ax+aw, cy+ah);
+      adGrad.addColorStop(0, '#FF5577'); adGrad.addColorStop(1, '#FF3355');
+      ctx.fillStyle = adGrad;
+      roundRect(ax, cy, aw, ah, ah/2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px '+CUTE;
+      ctx.fillText('\uD83C\uDFAC \u770B\u5EE3\u544A +1 \u2764\uFE0F', cx, cy+ah/2);
+      hitAreas.watchAdHeart = {x:ax, y:cy, w:aw, h:ah};
+
+      cy += ah + 10;
+      const buyGrad = ctx.createLinearGradient(ax, cy, ax+aw, cy+ah);
+      buyGrad.addColorStop(0, '#14B8A6'); buyGrad.addColorStop(1, '#0EA5E9');
+      ctx.fillStyle = buyGrad;
+      roundRect(ax, cy, aw, ah, ah/2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px '+CUTE;
+      ctx.fillText(`\uD83D\uDC8E \u8CB7\u65B7\u7121\u5EE3\u544A ${NO_ADS_PRICE_LABEL}`, cx, cy+ah/2);
+      hitAreas.buyNoAds = {x:ax, y:cy, w:aw, h:ah};
+      cy += ah;
+    } else {
+      hitAreas.watchAdHeart = null;
+      hitAreas.buyNoAds = null;
+      cy += 16;
+      ctx.fillStyle = '#4FC3A1';
+      ctx.font = 'bold 12px '+CUTE;
+      ctx.fillText('\u2705 \u5DF2\u555F\u7528\u7121\u5EE3\u544A', cx, cy);
+    }
+  } else {
+    hitAreas.watchAdHeart = null;
+    hitAreas.buyNoAds = null;
   }
 
   // Retry button
@@ -4334,6 +4452,16 @@ function onDown(e) {
         });
         return;
       }
+      if (hitAreas.buyNoAds && hitTest(p, hitAreas.buyNoAds)) {
+        sfx('click');
+        purchaseNoAdsLifetime().then(ok => {
+          if (ok) {
+            addHeart(HEARTS_MAX);
+            initAdMob();
+          }
+        });
+        return;
+      }
       // Leaderboard button
       if (hitTest(p, hitAreas.leaderboard)) {
         sfx('click');
@@ -4515,6 +4643,25 @@ function onDown(e) {
             state.movesLeft = 3;
             state.gameOver = false;
             setScreen(SCR.PLAYING);
+          }
+        });
+        return;
+      }
+      // Out-of-hearts support: watch ad for +1 heart
+      if (hitAreas.watchAdHeart && hitTest(p, hitAreas.watchAdHeart)) {
+        sfx('click');
+        showRewardedAd().then(ok => {
+          if (ok) { addHeart(1); }
+        });
+        return;
+      }
+      // Buy no-ads lifetime (TWD 120)
+      if (hitAreas.buyNoAds && hitTest(p, hitAreas.buyNoAds)) {
+        sfx('click');
+        purchaseNoAdsLifetime().then(ok => {
+          if (ok) {
+            addHeart(HEARTS_MAX);
+            initAdMob();
           }
         });
         return;
