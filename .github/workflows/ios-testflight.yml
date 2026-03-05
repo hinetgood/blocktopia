@@ -23,6 +23,64 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Select Xcode (prefer 26+)
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import os
+          import pathlib
+          import re
+          import sys
+
+          preferred_major = 26
+          cutoff = datetime.date(2026, 4, 28)
+          today = datetime.datetime.utcnow().date()
+
+          apps = []
+          for path in pathlib.Path("/Applications").glob("Xcode*.app"):
+            name = path.name
+            # Handles Xcode_16.4.app / Xcode_26.0.app / Xcode.app
+            m = re.match(r"^Xcode(?:_(\d+)(?:\.(\d+))?)?\.app$", name)
+            if not m:
+              continue
+            major = int(m.group(1)) if m.group(1) else 0
+            minor = int(m.group(2)) if m.group(2) else 0
+            apps.append((major, minor, path))
+
+          if not apps:
+            print("::error::No Xcode installation found in /Applications")
+            sys.exit(1)
+
+          # Prefer major >= 26; otherwise use highest available.
+          eligible = [x for x in apps if x[0] >= preferred_major]
+          selected = max(eligible or apps, key=lambda x: (x[0], x[1]))
+          major, minor, app_path = selected
+          developer_dir = app_path / "Contents" / "Developer"
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+            f.write(f"DEVELOPER_DIR={developer_dir}\n")
+
+          print(f"Selected Xcode app: {app_path}")
+          print(f"DEVELOPER_DIR={developer_dir}")
+
+          if today >= cutoff and major < preferred_major:
+            print(
+              "::error::Apple requires iOS 26 SDK uploads after 2026-04-28, "
+              f"but available Xcode is {major}.{minor}."
+            )
+            sys.exit(1)
+          elif major < preferred_major:
+            print(
+              "::warning::Using pre-26 Xcode before cutoff date. "
+              "Upgrade runner image/toolchain before 2026-04-28."
+            )
+          PY
+
+      - name: Show Xcode and SDK versions
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
