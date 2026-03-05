@@ -40,7 +40,7 @@ D:\0.技師案子-本地作業\APP\blocktopia\
 | 遊戲引擎 | 純 HTML5 Canvas，零框架 |
 | 原生包裝 | Capacitor 8.1.0 |
 | 廣告 SDK | @capacitor-community/admob 8.0.0 |
-| App ID (Bundle ID) | `com.blocktopia.app` |
+| App ID (Bundle ID) | `com.hinetgood.blocktopia` |
 | App 名稱 | `Blocktopia` |
 | 最低 iOS 版本 | Capacitor 8 預設（iOS 14+） |
 
@@ -78,7 +78,7 @@ npx cap open ios
 
 1. **Signing & Capabilities**
    - Team: 用戶的 Apple Developer 帳號
-   - Bundle Identifier: `com.blocktopia.app`
+   - Bundle Identifier: `com.hinetgood.blocktopia`
    - 啟用 Automatically manage signing
 
 2. **General**

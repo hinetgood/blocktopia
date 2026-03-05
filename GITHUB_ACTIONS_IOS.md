@@ -45,7 +45,7 @@
 
 - `No Accounts` / `Provisioning profile` 相關錯誤：
   - 確認 `APPLE_TEAM_ID` 正確
-  - 確認 App ID `com.blocktopia.app` 已在 Apple Developer 建立
+  - 確認 App ID `com.hinetgood.blocktopia` 已在 Apple Developer 建立
   - 確認 App Store Connect API Key 有權限（建議 Admin / App Manager）
 - `No IPA file found`：
   - 查看 Archive/Export 步驟 log，通常是簽名或匯出設定失敗
@@ -56,4 +56,3 @@
 - 審核備註請註明：LINE 登入為可選功能（不登入也可遊玩）。
 - 隱私政策可用：
   - `https://hinetgood.github.io/blocktopia/privacy-policy.html`
-

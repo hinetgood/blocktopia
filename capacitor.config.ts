@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.blocktopia.app',
+  appId: 'com.hinetgood.blocktopia',
   appName: 'Blocktopia',
   webDir: 'dist'
 };
