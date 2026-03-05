@@ -4,7 +4,7 @@
   "description": "Blocktopia - Block Puzzle Game",
   "private": true,
   "scripts": {
-    "build": "echo 'Static HTML - no build needed' && mkdir -p dist && cp index.html dist/ && cp -r assets dist/",
+    "build": "node scripts/build-static.js",
     "cap:init": "npx cap init Blocktopia com.blocktopia.app --web-dir dist",
     "cap:android": "npx cap add android",
     "cap:ios": "npx cap add ios",
