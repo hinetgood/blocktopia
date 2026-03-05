@@ -14,6 +14,11 @@
 - `APPSTORE_KEY_ID`：App Store Connect API Key ID
 - `APPSTORE_ISSUER_ID`：App Store Connect API Issuer ID（UUID）
 - `APPSTORE_API_KEY_BASE64`：`.p8` 檔內容做 Base64 後的字串
+- `ADMOB_APP_ID_IOS`：AdMob iOS App ID（格式：`ca-app-pub-xxxx~yyyy`）
+- `ADMOB_REWARDED_IOS`：AdMob iOS Rewarded 廣告單元 ID
+- `ADMOB_INTERSTITIAL_IOS`：AdMob iOS Interstitial 廣告單元 ID
+- `ADMOB_REWARDED_ANDROID`（選填）：Android Rewarded ID
+- `ADMOB_INTERSTITIAL_ANDROID`（選填）：Android Interstitial ID
 
 ## 2) 產生 `APPSTORE_API_KEY_BASE64`
 
@@ -52,7 +57,8 @@
 
 ## 6) 上架備註
 
-- 目前 `index.html` 的 AdMob 是測試 ID，可先送審。
+- workflow 會先檢查 AdMob iOS 正式 ID；沒填會直接失敗，避免誤上測試廣告。
+- `dist/ad-config.js` 會在 build 時自動由 Secrets 產生。
 - 審核備註請註明：LINE 登入為可選功能（不登入也可遊玩）。
 - 隱私政策可用：
   - `https://hinetgood.github.io/blocktopia/privacy-policy.html`

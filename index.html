@@ -24,6 +24,7 @@
 <!-- Firebase SDKs (compat for script-tag usage) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="./ad-config.js"></script>
 <script>
 (()=>{
 'use strict';
@@ -37,15 +38,21 @@ const GAP  = 3;
 // ============================================================
 //  ADMOB — Rewarded Video + Interstitial (Capacitor plugin)
 // ============================================================
+const RUNTIME_AD_CONFIG = (typeof window !== 'undefined' && window.__BLOCKTOPIA_AD_CONFIG__)
+  ? window.__BLOCKTOPIA_AD_CONFIG__
+  : {};
+const AD_TEST_MODE = (typeof window !== 'undefined' && typeof window.__BLOCKTOPIA_AD_TEST_MODE__ === 'boolean')
+  ? window.__BLOCKTOPIA_AD_TEST_MODE__
+  : true;
+
 const AD_CONFIG = {
-  // Replace with your real AdMob unit IDs before publishing
   rewarded: {
-    android: 'ca-app-pub-3940256099942544/5224354917', // test ID
-    ios:     'ca-app-pub-3940256099942544/1712485313', // test ID
+    android: RUNTIME_AD_CONFIG.rewarded?.android || 'ca-app-pub-3940256099942544/5224354917',
+    ios:     RUNTIME_AD_CONFIG.rewarded?.ios || 'ca-app-pub-3940256099942544/1712485313',
   },
   interstitial: {
-    android: 'ca-app-pub-3940256099942544/1033173712', // test ID
-    ios:     'ca-app-pub-3940256099942544/4411468910', // test ID
+    android: RUNTIME_AD_CONFIG.interstitial?.android || 'ca-app-pub-3940256099942544/1033173712',
+    ios:     RUNTIME_AD_CONFIG.interstitial?.ios || 'ca-app-pub-3940256099942544/4411468910',
   }
 };
 let _adReady = false;
@@ -59,7 +66,7 @@ async function initAdMob() {
   if (typeof Capacitor === 'undefined' || !Capacitor.Plugins?.AdMob) return;
   const { AdMob } = Capacitor.Plugins;
   try {
-    await AdMob.initialize({ initializeForTesting: true });
+    await AdMob.initialize({ initializeForTesting: AD_TEST_MODE });
     _prepareRewardedAd();
     _prepareInterstitial();
   } catch(e) { console.warn('AdMob init failed:', e); }
