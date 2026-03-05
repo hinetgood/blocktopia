@@ -100,6 +100,9 @@ jobs:
 
       - name: Upload to TestFlight
         run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          cp "$API_KEY_PATH" "$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APPSTORE_KEY_ID }}.p8"
+
           IPA_FILE=$(find "$EXPORT_PATH" -maxdepth 1 -name "*.ipa" | head -n 1)
           if [ -z "$IPA_FILE" ]; then
             echo "No IPA file found in $EXPORT_PATH"
